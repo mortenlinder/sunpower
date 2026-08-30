@@ -9,9 +9,8 @@ use Solportalen\Device\Serial\LinuxSerialTransport;
 
 final class GrowattSphControl
 {
-    private const ENABLE_REGISTERS=[1082,1085,1088,1102,1105,1108];
-    private const TIME_REGISTERS=[1080,1081,1100,1101];
-    private const MANAGED_REGISTERS=[1070,1071,1080,1081,1082,1085,1088,1090,1091,1092,1100,1101,1102,1105,1108];
+    private const PERIOD_STARTS=[1080,1083,1086,1100,1103,1106];
+    private const MANAGED_REGISTERS=[1070,1071,1080,1081,1082,1083,1084,1085,1086,1087,1088,1090,1091,1092,1100,1101,1102,1103,1104,1105,1106,1107,1108];
     private const PRIORITIES=['load_first'=>0,'battery_first'=>1,'grid_first'=>2];
 
     public function __construct(private readonly LinuxSerialTransport $transport,private readonly int $slaveId=1,private readonly bool $writesEnabled=false)
@@ -43,7 +42,8 @@ final class GrowattSphControl
     public function setLoadFirst():array
     {
         $before=$this->readHolding(1070,39);
-        foreach([1082,1085,1088,1102,1105,1108,1092]as$address)$this->writeVerified($address,0);
+        foreach(self::PERIOD_STARTS as$start)$this->writePeriod($start,$before[$start],$before[$start+1],0);
+        $this->writeVerified(1092,0);
         sleep(2);$priority=$this->readPriority();
         if($priority!==0)throw new RuntimeException('Load First blev skrevet, men priority-readback er ikke 0.');
         return ['mode'=>'load_first','priority_code'=>$priority,'before'=>$this->selected($before),'after'=>$this->selected($this->readHolding(1070,39)),'verified'=>true,'completed_at'=>gmdate(DATE_ATOM)];
@@ -66,24 +66,42 @@ final class GrowattSphControl
     /** @param array<int,int> $baseline */
     private function applyTestMode(string $mode,array $baseline):void
     {
-        foreach(self::ENABLE_REGISTERS as$address)$this->writeVerified($address,0);
+        foreach(self::PERIOD_STARTS as$start)$this->writePeriod($start,$baseline[$start],$baseline[$start+1],0);
         $this->writeVerified(1092,0);
         if($mode==='grid_first'){
             $this->writeVerified(1070,20);$this->writeVerified(1071,max(30,min(90,$baseline[1071])));
-            $this->writeVerified(1080,0);$this->writeVerified(1081,(23<<8)|59);$this->writeVerified(1082,1);
+            $this->writePeriod(1080,0,(23<<8)|59,1);
         }elseif($mode==='battery_first'){
             $this->writeVerified(1090,20);$this->writeVerified(1091,max(30,min(95,$baseline[1091])));
-            $this->writeVerified(1100,0);$this->writeVerified(1101,(23<<8)|59);$this->writeVerified(1102,1);
+            $this->writePeriod(1100,0,(23<<8)|59,1);
         }
     }
 
     /** @param array<int,int> $baseline */
     private function restore(array $baseline):void
     {
-        foreach(self::ENABLE_REGISTERS as$address)$this->writeVerified($address,0);
+        $current=$this->readHolding(1070,39);
+        foreach(self::PERIOD_STARTS as$start)$this->writePeriod($start,$current[$start],$current[$start+1],0);
         $this->writeVerified(1092,0);
-        foreach([1070,1071,1080,1081,1090,1091,1100,1101]as$address)$this->writeVerified($address,$baseline[$address]);
-        foreach([1092,1082,1085,1088,1102,1105,1108]as$address)$this->writeVerified($address,$baseline[$address]);
+        foreach([1070,1071,1090,1091]as$address)$this->writeVerified($address,$baseline[$address]);
+        foreach(self::PERIOD_STARTS as$start)$this->writePeriod($start,$baseline[$start],$baseline[$start+1],$baseline[$start+2]);
+        $this->writeVerified(1092,$baseline[1092]);
+    }
+
+    private function writePeriod(int $start,int $from,int $to,int $enabled):void
+    {
+        if(!in_array($start,self::PERIOD_STARTS,true)||$from<0||$from>65535||$to<0||$to>65535||!in_array($enabled,[0,1],true))throw new RuntimeException('Ugyldig period-write.');
+        $values=[$from,$to,$enabled];$before=$this->readHolding($start,3);
+        if(array_values($before)===$values)return;
+        $request=RtuCodec::writeMultipleRequest($this->slaveId,$start,$values,$this->writesEnabled);
+        $echo=RtuCodec::decodeWriteMultipleResponse($this->transport->exchange($request),$this->slaveId);
+        if($echo!==['address'=>$start,'count'=>3])throw new RuntimeException("FC16-ekko matchede ikke periodeblokken ved $start.");
+        $actual=[];
+        for($attempt=1;$attempt<=8;$attempt++){
+            usleep(150000);$actual=$this->readHolding($start,3);
+            if(array_values($actual)===$values)return;
+        }
+        throw new RuntimeException('FC03-readback efter FC16 fejlede for periodeblokken ved '.$start.': forventede '.json_encode($values).', læste '.json_encode(array_values($actual)).'.');
     }
 
     private function writeVerified(int $address,int $value):void
@@ -94,23 +112,16 @@ final class GrowattSphControl
         // de fleste registre allerede identiske med baseline.
         $before=$this->readHolding($address,1)[$address];
         if($before===$value)return;
-        if(in_array($address,self::TIME_REGISTERS,true)){
-            $request=RtuCodec::writeMultipleRequest($this->slaveId,$address,[$value],$this->writesEnabled);
-            $echo=RtuCodec::decodeWriteMultipleResponse($this->transport->exchange($request),$this->slaveId);
-            if($echo!==['address'=>$address,'count'=>1])throw new RuntimeException("FC16-ekko matchede ikke register $address.");
-        }else{
-            $request=RtuCodec::writeSingleRequest($this->slaveId,$address,$value,$this->writesEnabled);
-            $echo=RtuCodec::decodeWriteSingleResponse($this->transport->exchange($request),$this->slaveId);
-            if($echo!==['address'=>$address,'value'=>$value])throw new RuntimeException("FC06-ekko matchede ikke register $address.");
-        }
+        $request=RtuCodec::writeSingleRequest($this->slaveId,$address,$value,$this->writesEnabled);
+        $echo=RtuCodec::decodeWriteSingleResponse($this->transport->exchange($request),$this->slaveId);
+        if($echo!==['address'=>$address,'value'=>$value])throw new RuntimeException("FC06-ekko matchede ikke register $address.");
         $actual=null;
         for($attempt=1;$attempt<=8;$attempt++){
             usleep(150000);
             $actual=$this->readHolding($address,1)[$address];
             if($actual===$value)return;
         }
-        $function=in_array($address,self::TIME_REGISTERS,true)?'FC16':'FC06';
-        throw new RuntimeException("FC03-readback efter $function fejlede for register $address: forventede $value, læste $actual (før write: $before).");
+        throw new RuntimeException("FC03-readback efter FC06 fejlede for register $address: forventede $value, læste $actual (før write: $before).");
     }
 
     /** @return array<int,int> */
