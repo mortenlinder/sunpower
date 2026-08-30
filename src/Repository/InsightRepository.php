@@ -7,6 +7,7 @@ use DateTimeImmutable;
 use DateTimeZone;
 use PDO;
 use Solportalen\Config\Env;
+use Solportalen\Energy\Pricing\ElectricityTax;
 
 final class InsightRepository
 {
@@ -22,7 +23,8 @@ final class InsightRepository
             $hour = (int) $local->format('G');
             $tariff = $hour < 6 ? (float) Env::get('GRID_TARIFF_LOW_DKK', '.1327') : ($hour >= 17 && $hour < 21 ? (float) Env::get('GRID_TARIFF_PEAK_DKK', '.5176') : (float) Env::get('GRID_TARIFF_HIGH_DKK', '.1991'));
             $price['tariff_dkk_kwh'] = $tariff;
-            $price['total_dkk_kwh'] = round(((float) $price['spot_dkk_kwh'] + $tariff + (float) Env::get('ENERGY_TAX_DKK', '.009') + (float) Env::get('SUPPLIER_MARKUP_DKK', '0')) * 1.25, 4);
+            $price['tax_dkk_kwh'] = ElectricityTax::blendedRate();
+            $price['total_dkk_kwh'] = round(((float) $price['spot_dkk_kwh'] + $tariff + $price['tax_dkk_kwh'] + (float) Env::get('SUPPLIER_MARKUP_DKK', '0')) * 1.25, 4);
         }
         unset($price);
         $sorted = $prices; usort($sorted, fn ($a, $b) => $a['total_dkk_kwh'] <=> $b['total_dkk_kwh']);
@@ -30,6 +32,6 @@ final class InsightRepository
         $solar = array_column($weather, 'solar_score');
         $score = $solar === [] ? null : round(array_sum($solar) / count($solar));
         $events = $this->pdo->query('SELECT event_type,started_at,ended_at,detected_load_w,energy_kwh,confidence FROM consumption_events ORDER BY started_at DESC LIMIT 5')->fetchAll();
-        return ['location' => Env::get('LOCATION_NAME', 'Værløse'), 'weather' => $weather, 'prices' => $prices, 'solar_barometer' => $score, 'consumption_events' => $events, 'plan' => ['mode' => 'shadow', 'action' => $cheap === [] ? 'Afventer priser' : 'Billigste ladevinduer er fundet', 'cheap_intervals' => $cheap, 'writes_enabled' => false], 'generated_at' => gmdate(DATE_ATOM)];
+        return ['location' => Env::get('LOCATION_NAME', 'Værløse'), 'weather' => $weather, 'prices' => $prices, 'electricity_tax' => ElectricityTax::description(), 'solar_barometer' => $score, 'consumption_events' => $events, 'plan' => ['mode' => 'shadow', 'action' => $cheap === [] ? 'Afventer priser' : 'Billigste ladevinduer er fundet', 'cheap_intervals' => $cheap, 'writes_enabled' => false], 'generated_at' => gmdate(DATE_ATOM)];
     }
 }

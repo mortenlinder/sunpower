@@ -9,6 +9,7 @@ use PDO;
 use RuntimeException;
 use Solportalen\Config\Env;
 use Solportalen\Energy\Optimizer\DynamicProgrammingOptimizer;
+use Solportalen\Energy\Pricing\ElectricityTax;
 use Solportalen\Repository\StateRepository;
 
 final class PlanService
@@ -40,25 +41,36 @@ final class PlanService
 
     public function latest(): array
     {
-        $plan=$this->pdo->query('SELECT p.*,a.approved_at,a.approved_by,a.status approval_status FROM plans p LEFT JOIN plan_approvals a ON a.plan_id=p.id ORDER BY p.id DESC LIMIT 1')->fetch();if(!$plan)return [];
+        $this->expireApprovedPlans();
+        $plan=$this->pdo->query('SELECT p.*,a.approved_at,a.expires_at,a.approved_by,a.status approval_status FROM plans p LEFT JOIN plan_approvals a ON a.plan_id=p.id ORDER BY p.id DESC LIMIT 1')->fetch();if(!$plan)return [];
         $statement=$this->pdo->prepare('SELECT starts_at,ends_at,action,power_w,soc_before,soc_after,buy_price,baseline_cost,optimized_cost,explanation,confidence FROM plan_intervals WHERE plan_id=? ORDER BY starts_at');$statement->execute([$plan['id']]);$rows=$statement->fetchAll();
-        $plan['intervals']=$rows;$plan['horizon_hours']=$rows===[]?0:round((strtotime(end($rows)['ends_at'])-strtotime($rows[0]['starts_at']))/3600,1);$plan['action_intervals']=count(array_filter($rows,fn($r)=>$r['action']!=='hold'));$plan['csrf_token']=self::csrfToken();return $plan;
+        $mode=$this->pdo->query("SELECT state_value FROM operational_state WHERE state_key='requested_battery_mode'")->fetchColumn();
+        $plan['intervals']=$rows;$plan['horizon_hours']=$rows===[]?0:round((strtotime(end($rows)['ends_at'])-strtotime($rows[0]['starts_at']))/3600,1);$plan['action_intervals']=count(array_filter($rows,fn($r)=>$r['action']!=='hold'));$plan['csrf_token']=self::csrfToken();$plan['requested_battery_mode']=$mode?:'load_first';return $plan;
     }
 
     public function approve(int $planId,string $token,string $approvedBy): array
     {
         if(!hash_equals(self::csrfToken(),$token)&&!hash_equals(self::csrfToken('-1 day'),$token))throw new RuntimeException('Ugyldigt godkendelsestoken. Genindlæs siden.');
-        $statement=$this->pdo->prepare('SELECT id,input_hash FROM plans WHERE id=?');$statement->execute([$planId]);$plan=$statement->fetch();if(!$plan)throw new RuntimeException('Planen findes ikke.');
-        $insert=$this->pdo->prepare('INSERT INTO plan_approvals(plan_id,approved_at,approved_by,approval_token_hash,status) VALUES(?,UTC_TIMESTAMP(6),?,?,"approved_shadow") ON DUPLICATE KEY UPDATE approved_at=VALUES(approved_at),approved_by=VALUES(approved_by),approval_token_hash=VALUES(approval_token_hash),status="approved_shadow"');
+        $statement=$this->pdo->prepare('SELECT p.id,p.input_hash,MAX(i.ends_at) expires_at FROM plans p JOIN plan_intervals i ON i.plan_id=p.id WHERE p.id=? GROUP BY p.id,p.input_hash');$statement->execute([$planId]);$plan=$statement->fetch();if(!$plan)throw new RuntimeException('Planen findes ikke.');
+        if(strtotime((string)$plan['expires_at'].' UTC')<=time())throw new RuntimeException('Planen er allerede udløbet og kan ikke godkendes.');
+        $insert=$this->pdo->prepare('INSERT INTO plan_approvals(plan_id,approved_at,expires_at,approved_by,approval_token_hash,status) VALUES(?,UTC_TIMESTAMP(6),?,?,?,"approved_shadow") ON DUPLICATE KEY UPDATE approved_at=VALUES(approved_at),expires_at=VALUES(expires_at),approved_by=VALUES(approved_by),approval_token_hash=VALUES(approval_token_hash),status="approved_shadow"');
         // Store only a one-way digest of the presented anti-CSRF token.
-        $insert->execute([$planId,$approvedBy,hash('sha256',$token)]);
+        $insert->execute([$planId,$plan['expires_at'],$approvedBy,hash('sha256',$token)]);
+        $mode=$this->pdo->prepare("INSERT INTO operational_state(state_key,state_value,reason,updated_at) VALUES('requested_battery_mode','approved_plan',?,UTC_TIMESTAMP(6)) ON DUPLICATE KEY UPDATE state_value=VALUES(state_value),reason=VALUES(reason),updated_at=VALUES(updated_at)");$mode->execute(['Manuelt godkendt plan #'.$planId.' er gyldig til '.$plan['expires_at'].' UTC; derefter Load First']);
         $audit=$this->pdo->prepare('INSERT INTO audit_log(actor,action,object_type,object_id,before_json,after_json,reason,ip_address,correlation_id,created_at) VALUES(?,"approve_shadow_plan","plan",?,NULL,?,"Manuel godkendelse; ingen Modbus-writes",?,UUID(),UTC_TIMESTAMP(6))');$audit->execute([$approvedBy,(string)$planId,json_encode(['status'=>'approved_shadow','input_hash'=>$plan['input_hash']],JSON_THROW_ON_ERROR),$approvedBy]);
-        return ['plan_id'=>$planId,'status'=>'approved_shadow','writes_executed'=>false,'approved_at'=>gmdate(DATE_ATOM)];
+        return ['plan_id'=>$planId,'status'=>'approved_shadow','expires_at'=>$plan['expires_at'].'Z','fallback_mode'=>'load_first','writes_executed'=>false,'approved_at'=>gmdate(DATE_ATOM)];
+    }
+
+    public function expireApprovedPlans(): int
+    {
+        $count=$this->pdo->exec("UPDATE plan_approvals SET status='expired' WHERE status='approved_shadow' AND expires_at IS NOT NULL AND expires_at<=UTC_TIMESTAMP(6)");
+        if($count>0)$this->pdo->exec("INSERT INTO operational_state(state_key,state_value,reason,updated_at) VALUES('requested_battery_mode','load_first','Den manuelt godkendte plan er udløbet',UTC_TIMESTAMP(6)) ON DUPLICATE KEY UPDATE state_value=VALUES(state_value),reason=VALUES(reason),updated_at=VALUES(updated_at)");
+        return (int)$count;
     }
 
     public static function csrfToken(string $modify='now'): string{return hash_hmac('sha256',(new DateTimeImmutable($modify,new DateTimeZone('UTC')))->format('Y-m-d'),(string)Env::get('APP_KEY','development-only'));}
 
-    private function prices(int $hours):array{$rows=$this->pdo->query('SELECT interval_start,interval_end,spot_dkk_kwh FROM prices WHERE interval_end>=UTC_TIMESTAMP() AND interval_start<UTC_TIMESTAMP()+INTERVAL '.max(1,min(48,$hours)).' HOUR ORDER BY interval_start')->fetchAll();$tz=new DateTimeZone('Europe/Copenhagen');foreach($rows as &$r){$h=(int)(new DateTimeImmutable($r['interval_start'],new DateTimeZone('UTC')))->setTimezone($tz)->format('G');$tariff=$h<6?(float)Env::get('GRID_TARIFF_LOW_DKK','.1062'):($h>=17&&$h<21?(float)Env::get('GRID_TARIFF_PEAK_DKK','.4141'):(float)Env::get('GRID_TARIFF_HIGH_DKK','.1593'));$r['total_dkk_kwh']=round(((float)$r['spot_dkk_kwh']+$tariff+(float)Env::get('ENERGY_TAX_DKK','.009')+(float)Env::get('SUPPLIER_MARKUP_DKK','0'))*1.25,4);}unset($r);return$rows;}
+    private function prices(int $hours):array{$rows=$this->pdo->query('SELECT interval_start,interval_end,spot_dkk_kwh FROM prices WHERE interval_end>=UTC_TIMESTAMP() AND interval_start<UTC_TIMESTAMP()+INTERVAL '.max(1,min(48,$hours)).' HOUR ORDER BY interval_start')->fetchAll();$tz=new DateTimeZone('Europe/Copenhagen');$tax=ElectricityTax::blendedRate();foreach($rows as &$r){$h=(int)(new DateTimeImmutable($r['interval_start'],new DateTimeZone('UTC')))->setTimezone($tz)->format('G');$tariff=$h<6?(float)Env::get('GRID_TARIFF_LOW_DKK','.1062'):($h>=17&&$h<21?(float)Env::get('GRID_TARIFF_PEAK_DKK','.4141'):(float)Env::get('GRID_TARIFF_HIGH_DKK','.1593'));$r['total_dkk_kwh']=round(((float)$r['spot_dkk_kwh']+$tariff+$tax+(float)Env::get('SUPPLIER_MARKUP_DKK','0'))*1.25,4);}unset($r);return$rows;}
     private function weather():array{$rows=$this->pdo->query('SELECT forecast_at,expected_pv_w FROM weather_forecasts WHERE forecast_at>=UTC_TIMESTAMP()-INTERVAL 1 HOUR')->fetchAll();$result=[];foreach($rows as$r)$result[(new DateTimeImmutable($r['forecast_at'],new DateTimeZone('UTC')))->format('Y-m-d-H')]=$r;return$result;}
     private function loadProfile():array{$rows=$this->pdo->query("SELECT DAYOFWEEK(source_timestamp) dow,HOUR(source_timestamp) hour,AVG(value_decimal) watts FROM telemetry WHERE signal_name='load_power_w' AND source_timestamp>UTC_TIMESTAMP()-INTERVAL 28 DAY GROUP BY DAYOFWEEK(source_timestamp),HOUR(source_timestamp)")->fetchAll();$result=[];foreach($rows as$r){$iso=((int)$r['dow']+5)%7+1;$result[$iso.'-'.$r['hour']]=(float)$r['watts'];}return$result;}
     private function evProfile():array{return$this->pdo->query('SELECT WEEKDAY(started_at)+1 weekday,HOUR(started_at) start_hour,AVG(TIMESTAMPDIFF(MINUTE,started_at,ended_at)) duration_min,AVG(detected_load_w) watts,COUNT(*) samples FROM consumption_events WHERE ended_at IS NOT NULL AND started_at>UTC_TIMESTAMP()-INTERVAL 42 DAY GROUP BY WEEKDAY(started_at),HOUR(started_at) HAVING COUNT(*)>=2')->fetchAll();}

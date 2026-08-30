@@ -60,5 +60,13 @@ if (str_starts_with($path, '/api/')) {
     http_response_code(404); header('Content-Type: application/json'); echo '{"error":"Endpoint findes ikke"}'; exit;
 }
 
+if ($path === '/weather' || $path === '/prices') {
+    try { $insights = (new InsightRepository(Connection::get()))->dashboard(); }
+    catch (Throwable) { $insights = ['weather'=>[],'prices'=>[],'electricity_tax'=>[],'location'=>Env::get('LOCATION_NAME','Værløse')]; }
+    $forecastType = $path === '/weather' ? 'weather' : 'prices';
+    require dirname(__DIR__) . '/resources/views/forecast.php';
+    exit;
+}
+
 $wallboard = $path === '/wallboard';
 require dirname(__DIR__) . '/resources/views/dashboard.php';
