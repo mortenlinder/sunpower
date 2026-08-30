@@ -30,6 +30,9 @@ final class RegisterDecoder
             default => throw new InvalidArgumentException('Ikke-understøttet registertype: ' . $type),
         };
         if (is_int($raw) || is_float($raw)) {
+            if (is_int($raw) && !array_key_exists('scale', $definition) && !array_key_exists('offset', $definition)) {
+                return $raw;
+            }
             return ($raw * (float) ($definition['scale'] ?? 1)) + (float) ($definition['offset'] ?? 0);
         }
         return $raw;
