@@ -5,7 +5,7 @@ Testkommandoen er bevidst kun til lokal commissioning. Den kræver to miljølås
 ## Sikkerhedsramme
 
 - Grid First testes med højst 20 % afladeeffekt og mindst 30 % stop-SOC.
-- Battery First testes med højst 20 % ladeeffekt og AC Charge slået fra.
+- Battery First testes med højst 20 % ladeeffekt, stop ved senest 95 % SOC og AC Charge slået til under den korte test. Det sikrer et observerbart priority-skift, selv når solproduktionen er lavere end husets forbrug. AC Charge gendannes til baseline bagefter.
 - Testvarighed er mindst 10 og højst 120 sekunder.
 - Load First opnås ved at deaktivere alle Grid First- og Battery First-enable-registre samt AC Charge.
 - Kun register 1070-1071, 1080-1088, 1090-1092 og 1100-1108 er på whitelisten.

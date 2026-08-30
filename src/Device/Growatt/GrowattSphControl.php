@@ -29,7 +29,7 @@ final class GrowattSphControl
         try{
             $this->applyTestMode($mode,$baseline);
             sleep(2);$applied=['priority_code'=>$this->readPriority(),'holding'=>$this->readHolding(1070,39)];
-            if($applied['priority_code']!==self::PRIORITIES[$mode])throw new RuntimeException('Inverterens priority-readback matchede ikke den ønskede mode.');
+            if($applied['priority_code']!==self::PRIORITIES[$mode])throw new RuntimeException('Inverterens priority-readback matchede ikke den ønskede mode: forventede '.self::PRIORITIES[$mode].', læste '.$applied['priority_code'].'.');
             sleep($seconds);
         }finally{
             $this->restore($baseline);
@@ -73,7 +73,7 @@ final class GrowattSphControl
             $this->writePeriod(1080,0,(23<<8)|59,1);
         }elseif($mode==='battery_first'){
             $this->writeVerified(1090,20);$this->writeVerified(1091,max(30,min(95,$baseline[1091])));
-            $this->writePeriod(1100,0,(23<<8)|59,1);
+            $this->writePeriod(1100,0,(23<<8)|59,1);$this->writeVerified(1092,1);
         }
     }
 
