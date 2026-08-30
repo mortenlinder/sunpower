@@ -9,6 +9,7 @@ use Solportalen\Device\Simulator\EnergySimulator;
 use Solportalen\Repository\StateRepository;
 use Solportalen\Repository\InsightRepository;
 use Solportalen\Energy\Planning\PlanService;
+use Solportalen\Integration\Supplier\ElprisSupplierService;
 
 header("Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'");
 header('X-Content-Type-Options: nosniff');
@@ -44,6 +45,11 @@ if ($path === '/api/v1/insights') {
     catch (Throwable $error) { http_response_code(503); echo json_encode(['error' => 'Prognosedata er ikke klar endnu'], JSON_THROW_ON_ERROR); }
     exit;
 }
+if ($path === '/api/v1/suppliers') {
+    header('Content-Type: application/json; charset=utf-8');
+    try { echo json_encode((new ElprisSupplierService(Connection::get()))->comparison(),JSON_THROW_ON_ERROR|JSON_UNESCAPED_UNICODE); }
+    catch(Throwable $error){http_response_code(503);echo json_encode(['error'=>'Leverandørdata er ikke klar endnu'],JSON_THROW_ON_ERROR);}exit;
+}
 if ($path === '/api/v1/plans/latest' && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET') {
     header('Content-Type: application/json; charset=utf-8');
     try { echo json_encode((new PlanService(Connection::get()))->latest(), JSON_THROW_ON_ERROR); }
@@ -66,6 +72,11 @@ if ($path === '/weather' || $path === '/prices') {
     $forecastType = $path === '/weather' ? 'weather' : 'prices';
     require dirname(__DIR__) . '/resources/views/forecast.php';
     exit;
+}
+if ($path === '/suppliers') {
+    try { $supplierComparison=(new ElprisSupplierService(Connection::get()))->comparison(); }
+    catch(Throwable){$supplierComparison=['current'=>[],'offers'=>[],'last_run'=>null,'export_comparison_included'=>false];}
+    require dirname(__DIR__).'/resources/views/suppliers.php';exit;
 }
 
 $wallboard = $path === '/wallboard';
