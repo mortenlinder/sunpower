@@ -23,6 +23,7 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y \
     php-mysql \
     mariadb-server \
     mariadb-client \
+    git \
     rsync \
     logrotate \
     ca-certificates \

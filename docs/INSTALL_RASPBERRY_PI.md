@@ -10,7 +10,7 @@ sudo apt install -y \
   apache2 libapache2-mod-php \
   php-cli php-common php-curl php-mbstring php-mysql \
   mariadb-server mariadb-client \
-  rsync logrotate ca-certificates curl
+  git rsync logrotate ca-certificates curl
 ```
 
 Det fulde installationsscript udfører også denne kommando, så prerequisite-trinnet behøver ikke køres separat.
