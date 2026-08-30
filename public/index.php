@@ -10,6 +10,7 @@ use Solportalen\Repository\StateRepository;
 use Solportalen\Repository\InsightRepository;
 use Solportalen\Energy\Planning\PlanService;
 use Solportalen\Integration\Supplier\ElprisSupplierService;
+use Solportalen\Repository\HistoryRepository;
 
 header("Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'");
 header('X-Content-Type-Options: nosniff');
@@ -39,6 +40,7 @@ if ($path === '/api/v1/state') {
     echo json_encode(['server_timestamp' => gmdate(DATE_ATOM), 'data_timestamp' => $state['source_timestamp'] ?? null, 'data_age_seconds' => $age, 'source' => $mode === 'simulator' ? 'simulator' : 'growatt_rs485', 'data_quality' => $state['data_quality'] ?? 'unavailable', 'system_state' => $online ? 'monitoring' : 'stale', 'data' => $state], JSON_THROW_ON_ERROR);
     exit;
 }
+if ($path === '/api/v1/history') {header('Content-Type: application/json; charset=utf-8');$range=(string)($_GET['range']??'24h');echo json_encode((new HistoryRepository(Connection::get()))->series($range),JSON_THROW_ON_ERROR);exit;}
 if ($path === '/api/v1/insights') {
     header('Content-Type: application/json; charset=utf-8');
     try { echo json_encode((new InsightRepository(Connection::get()))->dashboard(), JSON_THROW_ON_ERROR); }

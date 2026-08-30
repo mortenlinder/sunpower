@@ -18,6 +18,7 @@ use Solportalen\Integration\Forecast\ExternalDataService;
 use Solportalen\Integration\Supplier\ElprisSupplierService;
 use Solportalen\Energy\Planning\PlanService;
 use Solportalen\Integration\Ocpp\OcppServer;
+use Solportalen\Repository\HistoryRepository;
 
 $command = $argv[1] ?? 'help';
 if (in_array('--help', $argv, true) || $command === 'help') {
@@ -87,7 +88,9 @@ try {
             $service=new ElprisSupplierService(Connection::get());echo json_encode(['result'=>$service->refresh(true),'comparison'=>$service->comparison()],JSON_PRETTY_PRINT|JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR).PHP_EOL;break;
         case 'optimizer:run':
             $service=new PlanService(Connection::get());$id=$service->generate((int)($argv[2]??48));echo json_encode(['plan_id'=>$id,'plan'=>$service->latest()],JSON_PRETTY_PRINT|JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR).PHP_EOL;break;
-        case 'worker:mqtt': case 'profile:import': case 'telemetry:aggregate': case 'retention:run': case 'backup:create': case 'user:create-admin':
+        case 'telemetry:aggregate': echo json_encode(['rows'=>(new HistoryRepository(Connection::get()))->aggregate()],JSON_PRETTY_PRINT).PHP_EOL;break;
+        case 'retention:run': echo json_encode((new HistoryRepository(Connection::get()))->retain(),JSON_PRETTY_PRINT).PHP_EOL;break;
+        case 'worker:mqtt': case 'profile:import': case 'backup:create': case 'user:create-admin':
             throw new RuntimeException('Kommandoen kræver installeret database eller konkret konfiguration. Se --help og dokumentationen.');
         default: throw new RuntimeException('Ukendt kommando: ' . $command);
     }

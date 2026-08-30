@@ -64,6 +64,8 @@ function weatherIcon(symbol = '') {
     if (symbol.includes('partly')) return '◒';
     return '☀';
 }
+function drawHistory(points){const canvas=document.querySelector('#history-chart');if(!canvas||!points.length)return;const ratio=devicePixelRatio||1,w=canvas.clientWidth,h=260;canvas.width=Math.round(w*ratio);canvas.height=Math.round(h*ratio);const c=canvas.getContext('2d');c.setTransform(ratio,0,0,ratio,0,0);const l=48,r=10,t=12,b=28,pw=w-l-r,ph=h-t-b,keys=[['pv_power_w','#f5c85b'],['load_power_w','#56e39f'],['battery_power_w','#b6eb55'],['grid_power_w','#65a9ff']],max=Math.max(1000,...points.flatMap(p=>keys.map(([k])=>Math.abs(Number(p[k])||0))));c.font='10px system-ui';c.fillStyle='#789287';c.strokeStyle='#234238';for(let i=0;i<5;i++){const y=t+i*ph/4;c.beginPath();c.moveTo(l,y);c.lineTo(w-r,y);c.stroke();c.fillText(`${(max*(1-i/4)/1000).toFixed(1)} kW`,0,y+3)}keys.forEach(([k,color])=>{c.beginPath();points.forEach((p,i)=>{const x=l+i*pw/Math.max(1,points.length-1),y=t+ph-Math.abs(Number(p[k])||0)/max*ph;i?c.lineTo(x,y):c.moveTo(x,y)});c.strokeStyle=color;c.lineWidth=2;c.stroke()});[0,.5,1].forEach((f,i)=>{const p=points[Math.round((points.length-1)*f)];if(p)c.fillText(new Date(p.timestamp).toLocaleString('da-DK',{day:'2-digit',month:'short',hour:'2-digit'}),l+f*pw-(i?25:0),h-7)})}
+async function refreshHistory(range='24h'){try{const response=await fetch(`/api/v1/history?range=${range}`,{cache:'no-store'});if(!response.ok)return;const data=await response.json();drawHistory(data.points||[]);document.querySelector('#history-meta').textContent=`${data.points.length} punkter · ${data.resolution_minutes} min. opløsning · gemmes i ${data.retention_months} måneder`;document.querySelectorAll('.history-ranges button').forEach(b=>b.classList.toggle('active',b.dataset.range===range))}catch{}}
 
 function drawPrice(prices) {
     const canvas = document.querySelector('#price-chart');
@@ -200,8 +202,10 @@ setInterval(refresh, 5000);
 refreshInsights();
 setInterval(refreshInsights, 15 * 60 * 1000);
 refreshPlan();
+refreshHistory();
 setInterval(refreshPlan, 15 * 60 * 1000);
 document.querySelector('#approve-plan')?.addEventListener('click',approvePlan);
 document.querySelector('#apply-plan')?.addEventListener('click',applyPlan);
+document.querySelectorAll('.history-ranges button').forEach(button=>button.addEventListener('click',()=>refreshHistory(button.dataset.range)));
 addEventListener('resize', draw);
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/service-worker.js');

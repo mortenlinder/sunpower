@@ -12,7 +12,7 @@ $writesEnabled = Solportalen\Config\Env::bool('WRITES_ENABLED', false);
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#06110e"><title>Solportalen</title>
   <link rel="manifest" href="/manifest.webmanifest"><link rel="stylesheet" href="/assets/css/app.css"><link rel="stylesheet" href="/assets/css/insights.css"><link rel="stylesheet" href="/assets/css/learning.css"><link rel="stylesheet" href="/assets/css/plan.css"><link rel="stylesheet" href="/assets/css/control.css?v=6">
-  <script src="/assets/js/app.js?v=6" defer></script>
+  <script src="/assets/js/app.js?v=7" defer></script>
 </head>
 <body class="<?= $wallboard ? 'wallboard' : '' ?>" data-mode="<?= htmlspecialchars($mode, ENT_QUOTES) ?>">
 <header>
@@ -69,6 +69,7 @@ $writesEnabled = Solportalen\Config\Env::bool('WRITES_ENABLED', false);
     <article class="chart-card"><div class="section-title"><div><p class="eyebrow">SENESTE MINUTTER</p><h2>Anlæggets puls</h2></div><b id="sample-count">0 målepunkter</b></div><div class="legend"><span class="pv">Sol</span><span class="load">Hus</span><span class="battery">Batteri</span><span class="gridline">Net</span></div><canvas id="chart" height="190" aria-label="Live effektgraf"></canvas></article>
     <aside><article class="insight"><div class="insight-top"><span>LIVE INDSIGT</span><i>✦</i></div><h3 id="insight-title"><?= $batteryText ?></h3><p>Solportalen følger energiens vej lokalt og holder styring bag godkendte planer.</p><div class="readonly"><span>✓</span><div><b><?= $writesEnabled ? 'Write-kanal klar' : 'Read-only beskyttelse' ?></b><small><?= $writesEnabled ? 'Automatisk executor er endnu ikke aktiv' : 'Modbus-writes er deaktiveret' ?></small></div></div></article></aside>
   </section>
+  <section class="full-plan history-panel"><div class="plan-toolbar"><div><p class="eyebrow">24 MÅNEDERS ENERGIHISTORIK</p><h2>Produktion, forbrug, batteri og elnet</h2><p id="history-meta">15-minutters data gemmes lokalt og komprimeres automatisk.</p></div><div class="history-ranges"><button data-range="24h">24 timer</button><button data-range="7d">7 dage</button><button data-range="30d">30 dage</button><button data-range="12m">12 mdr.</button><button data-range="24m">24 mdr.</button></div></div><div class="legend"><span class="pv">Sol</span><span class="load">Hus</span><span class="battery">Batteri</span><span class="gridline">Net</span></div><canvas id="history-chart" height="260" aria-label="Historiske energimålinger med effektakse og tid"></canvas></section>
 </main></div>
 <footer><span id="footer-source"><?= $mode === 'simulator' ? 'Data er simulerede' : 'Live read-only RS485-data' ?></span> · Data forlader ikke dit lokale netværk · <a href="/healthz">Systemstatus</a></footer>
 </body></html>

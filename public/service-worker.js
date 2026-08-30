@@ -1,5 +1,5 @@
 'use strict';
-const CACHE = 'solportal-shell-v6';
+const CACHE = 'solportal-shell-v7';
 const SHELL = ['/', '/assets/css/app.css', '/assets/css/insights.css', '/assets/css/learning.css', '/assets/css/plan.css', '/assets/css/control.css?v=6', '/assets/js/app.js?v=6', '/assets/images/growatt-inverter-studio.png', '/manifest.webmanifest'];
 self.addEventListener('install', event => event.waitUntil(
     caches.open(CACHE).then(cache => cache.addAll(SHELL)).then(() => self.skipWaiting())
