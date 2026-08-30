@@ -20,6 +20,7 @@ final class GrowattSphReader
         $charge = $this->u32($hybrid, 11) * 0.1;
         $discharge = $this->u32($hybrid, 9) * 0.1;
         $toGrid = $this->u32($hybrid, 29) * 0.1;
+        $toUser = $this->u32($hybrid, 21) * 0.1;
         return [
             'device_online' => true,
             'device_status_code' => $base[0] ?? null,
@@ -39,13 +40,21 @@ final class GrowattSphReader
             'battery_power_w' => $discharge - $charge,
             'battery_soc_pct' => (float) ($hybrid[14] ?? 0),
             'load_power_w' => $this->u32($hybrid, 37) * 0.1,
-            'power_to_user_w' => $this->u32($hybrid, 21) * 0.1,
+            'power_to_user_w' => $toUser,
             'power_to_grid_w' => $toGrid,
-            'grid_power_w' => -$toGrid,
+            // Growatt exposes import and export as separate positive counters.
+            // Portal convention: positive = import, negative = export.
+            'grid_power_w' => $toUser - $toGrid,
             'data_quality' => 'measured_unverified_mapping',
             'source_timestamp' => $now,
             'received_timestamp' => $now,
         ];
+    }
+
+    /** @return array{input_0_99:list<int>,input_1000_1099:list<int>} */
+    public function rawSnapshot(): array
+    {
+        return ['input_0_99' => $this->read(0, 100), 'input_1000_1099' => $this->read(1000, 100)];
     }
 
     /** @return list<int> */

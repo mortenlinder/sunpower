@@ -4,6 +4,7 @@
 /.idea/
 /.vscode/
 /.build_tools/
+/.reference-growatt/
 *.log
 *.swp
 .DS_Store

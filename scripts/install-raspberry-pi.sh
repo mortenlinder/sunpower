@@ -106,7 +106,11 @@ install -m 0644 "$APP_DIR/systemd/solportal-forecast.timer" /etc/systemd/system/
 systemctl daemon-reload
 
 runuser -u solportal -- php "$APP_DIR/bin/solportal" database:migrate
-runuser -u solportal -- php "$APP_DIR/bin/solportal" worker:device --once
+# En commissioning-læsning må ikke blokere resten af en softwareopdatering, hvis
+# en anden lokal proces stadig ejer porten. Den permanente worker vil genstarte.
+if ! runuser -u solportal -- php "$APP_DIR/bin/solportal" worker:device --once; then
+    echo "ADVARSEL: Modbus-engangstesten kunne ikke køres. Kontroller portejeren efter installationen." >&2
+fi
 runuser -u solportal -- php "$APP_DIR/bin/solportal" scheduler:run
 
 systemctl enable --now solportal-device.service
