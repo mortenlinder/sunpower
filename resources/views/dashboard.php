@@ -11,8 +11,8 @@ $writesEnabled = Solportalen\Config\Env::bool('WRITES_ENABLED', false);
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#06110e"><title>Solportalen</title>
-  <link rel="manifest" href="/manifest.webmanifest"><link rel="stylesheet" href="/assets/css/app.css"><link rel="stylesheet" href="/assets/css/insights.css"><link rel="stylesheet" href="/assets/css/learning.css"><link rel="stylesheet" href="/assets/css/plan.css"><link rel="stylesheet" href="/assets/css/control.css?v=6">
-  <script src="/assets/js/app.js?v=7" defer></script>
+  <link rel="manifest" href="/manifest.webmanifest"><link rel="stylesheet" href="/assets/css/app.css?v=8"><link rel="stylesheet" href="/assets/css/insights.css"><link rel="stylesheet" href="/assets/css/learning.css"><link rel="stylesheet" href="/assets/css/plan.css"><link rel="stylesheet" href="/assets/css/control.css?v=8">
+  <script src="/assets/js/app.js?v=8" defer></script>
 </head>
 <body class="<?= $wallboard ? 'wallboard' : '' ?>" data-mode="<?= htmlspecialchars($mode, ENT_QUOTES) ?>">
 <header>
@@ -20,7 +20,7 @@ $writesEnabled = Solportalen\Config\Env::bool('WRITES_ENABLED', false);
   <div class="status"><span class="pill source-pill"><?= $mode === 'simulator' ? 'SIMULATOR' : 'GROWATT · RS485' ?></span><span class="pill read-pill"><?= $writesEnabled ? 'WRITES ARMED' : 'READ ONLY' ?></span><span class="live-dot"></span><span id="clock"></span></div>
 </header>
 <div class="layout">
-<?php if (!$wallboard): ?><nav><div class="nav-label">SOLPORTALEN</div><a class="active" href="/"><span>◉</span>Overblik</a><a href="#flow"><span>⌁</span>Energiflow</a><a href="/weather"><span>☀</span>Vejrprognose</a><a href="/prices"><span>↗</span>Elprisprognose</a><a href="/suppliers"><span>⌕</span>Leverandørvagt</a><a href="#plan"><span>✦</span>Godkendt plan</a><a href="#historik"><span>⌁</span>Historik</a><div class="nav-label">ANLÆG</div><a href="#batteri"><span>▣</span>Batteri</a><a href="#enheder"><span>◇</span>Enheder</a><a href="/commissioning"><span>⌘</span>Commissioning</a><a href="/wallboard"><span>□</span>Wallboard</a><div class="nav-safety"><i></i><div><b>Sikker tilstand</b><small>Load First uden gyldig plan</small></div></div></nav><?php endif; ?>
+<?php if (!$wallboard): ?><nav><div class="nav-label">SOLPORTALEN</div><a class="active" href="/"><span>◉</span>Overblik</a><a href="#flow"><span>⌁</span>Energiflow</a><a href="/analytics"><span>▥</span>Analyse & rapporter</a><a href="/weather"><span>☀</span>Vejrprognose</a><a href="/prices"><span>↗</span>Elprisprognose</a><a href="/suppliers"><span>⌕</span>Leverandørvagt</a><a href="#plan"><span>✦</span>Godkendt plan</a><div class="nav-label">ANLÆG</div><a href="/commissioning"><span>⌘</span>Commissioning</a><a href="/wallboard"><span>□</span>Wallboard</a><div class="nav-safety"><i></i><div><b>Sikker tilstand</b><small>Load First uden gyldig plan</small></div></div></nav><?php endif; ?>
 <main>
   <section class="hero"><div><p class="eyebrow">DIT ENERGIOVERBLIK</p><h1><span>God eftermiddag.</span> Dit anlæg arbejder for dig.</h1><p id="summary"><?= $online ? 'Live-data fra inverteren – helt lokalt i dit hjem.' : 'Venter på friske data fra inverteren.' ?></p></div><div class="safe"><span><?= $online ? '✓' : '!' ?></span><div><b id="connection-status"><?= $online ? 'Live forbindelse' : 'Data mangler' ?></b><small>Opdaterer hvert 5. sekund</small></div></div></section>
 
@@ -65,11 +65,10 @@ $writesEnabled = Solportalen\Config\Env::bool('WRITES_ENABLED', false);
     <div class="approval-panel"><div><span class="approval-icon">✓</span><div><b id="approval-title">Gennemse og gem planen</b><small id="approval-copy">Planen får en fast udløbstid. Derefter vælges Load First automatisk.</small></div></div><div class="approval-buttons"><button id="approve-plan" type="button" disabled>Gem og godkend planen</button><button id="apply-plan" type="button" disabled>Anvend på inverter</button></div></div>
   </section>
 
-  <section class="lower-grid" id="historik">
+  <section class="lower-grid pulse-section">
     <article class="chart-card"><div class="section-title"><div><p class="eyebrow">SENESTE MINUTTER</p><h2>Anlæggets puls</h2></div><b id="sample-count">0 målepunkter</b></div><div class="legend"><span class="pv">Sol</span><span class="load">Hus</span><span class="battery">Batteri</span><span class="gridline">Net</span></div><canvas id="chart" height="190" aria-label="Live effektgraf"></canvas></article>
     <aside><article class="insight"><div class="insight-top"><span>LIVE INDSIGT</span><i>✦</i></div><h3 id="insight-title"><?= $batteryText ?></h3><p>Solportalen følger energiens vej lokalt og holder styring bag godkendte planer.</p><div class="readonly"><span>✓</span><div><b><?= $writesEnabled ? 'Write-kanal klar' : 'Read-only beskyttelse' ?></b><small><?= $writesEnabled ? 'Automatisk executor er endnu ikke aktiv' : 'Modbus-writes er deaktiveret' ?></small></div></div></article></aside>
   </section>
-  <section class="full-plan history-panel"><div class="plan-toolbar"><div><p class="eyebrow">24 MÅNEDERS ENERGIHISTORIK</p><h2>Produktion, forbrug, batteri og elnet</h2><p id="history-meta">15-minutters data gemmes lokalt og komprimeres automatisk.</p></div><div class="history-ranges"><button data-range="24h">24 timer</button><button data-range="7d">7 dage</button><button data-range="30d">30 dage</button><button data-range="12m">12 mdr.</button><button data-range="24m">24 mdr.</button></div></div><div class="legend"><span class="pv">Sol</span><span class="load">Hus</span><span class="battery">Batteri</span><span class="gridline">Net</span></div><canvas id="history-chart" height="260" aria-label="Historiske energimålinger med effektakse og tid"></canvas></section>
 </main></div>
 <footer><span id="footer-source"><?= $mode === 'simulator' ? 'Data er simulerede' : 'Live read-only RS485-data' ?></span> · Data forlader ikke dit lokale netværk · <a href="/healthz">Systemstatus</a></footer>
 </body></html>

@@ -41,6 +41,7 @@ if ($path === '/api/v1/state') {
     exit;
 }
 if ($path === '/api/v1/history') {header('Content-Type: application/json; charset=utf-8');$range=(string)($_GET['range']??'24h');echo json_encode((new HistoryRepository(Connection::get()))->series($range),JSON_THROW_ON_ERROR);exit;}
+if ($path === '/api/v1/reports/energy') {header('Content-Type: application/json; charset=utf-8');$range=(string)($_GET['range']??'30d');echo json_encode((new HistoryRepository(Connection::get()))->report($range),JSON_THROW_ON_ERROR);exit;}
 if ($path === '/api/v1/insights') {
     header('Content-Type: application/json; charset=utf-8');
     try { echo json_encode((new InsightRepository(Connection::get()))->dashboard(), JSON_THROW_ON_ERROR); }
@@ -95,6 +96,9 @@ if ($path === '/commissioning') {
     $file=SOLPORTAL_ROOT.'/var/commissioning-growatt-holding.json';$commissioning=[];
     if(is_file($file)){try{$commissioning=json_decode((string)file_get_contents($file),true,64,JSON_THROW_ON_ERROR);}catch(Throwable){$commissioning=[];}}
     require dirname(__DIR__).'/resources/views/commissioning.php';exit;
+}
+if ($path === '/analytics') {
+    require dirname(__DIR__) . '/resources/views/analytics.php';exit;
 }
 
 $wallboard = $path === '/wallboard';
