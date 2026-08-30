@@ -16,6 +16,7 @@ $assert = static function (bool $condition, string $message='Assertion failed'):
 $test('CRC16 known frame', static fn () => $assert(Crc16::calculate(hex2bin('01030000000A')) === 0xCDC5));
 $test('Read request CRC', static fn () => $assert(bin2hex(RtuCodec::readRequest(1,3,0,10)) === '01030000000ac5cd'));
 $test('Read decode', static fn () => $assert(RtuCodec::decodeReadResponse(hex2bin('010304000a0014da3e'),1,3) === [10,20]));
+$test('Write response decode',static fn()=>$assert(RtuCodec::decodeWriteSingleResponse(hex2bin('010604380001c8f7'),1)===['address'=>1080,'value'=>1]));
 $test('Writes default denied', static function () use ($assert): void { try { RtuCodec::writeSingleRequest(1,1,1,false); } catch (ModbusException) { $assert(true); return; } $assert(false); });
 $test('Growatt holding snapshot decoding',static function()use($assert):void{$r=array_fill(0,39,0);$r[0]=80;$r[1]=20;$r[10]=(9<<8)|30;$r[11]=(11<<8);$r[12]=1;$r[20]=60;$r[21]=95;$r[22]=1;$r[30]=(1<<8)|15;$r[31]=(5<<8)|45;$r[32]=1;$d=GrowattSphCommissioning::decode($r);$assert($d['grid_first']['periods'][0]['start']['formatted']==='09:30');$assert($d['battery_first']['periods'][0]['stop']['formatted']==='05:45');$assert($d['battery_first']['ac_charge_enabled']===true);$assert($d['warnings']===[]);});
 $test('Signed decoding', static fn () => $assert((new RegisterDecoder())->decode([0xFF9C],['type'=>'int16']) === -100));

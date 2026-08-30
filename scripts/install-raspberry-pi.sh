@@ -133,6 +133,7 @@ ensure_env CURRENT_SUPPLIER_NAME Vindstød
 ensure_env CURRENT_SUPPLIER_ENERGY_DKK_KWH_EX_VAT 0.70
 ensure_env CURRENT_SUPPLIER_SUBSCRIPTION_DKK_MONTH_EX_VAT 0
 ensure_env SUPPLIER_COMPARISON_SPOT_DKK_KWH_EX_VAT 0.70
+ensure_env COMMISSIONING_WRITES_ENABLED false
 
 chown -R root:solportal-app "$APP_DIR"
 chown solportal:solportal-app "$APP_DIR/var"

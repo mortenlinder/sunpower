@@ -26,6 +26,19 @@ final class RtuCodec
         return Crc16::append(pack('CCnn', $slave, 6, $address, $value));
     }
 
+    /** @return array{address:int,value:int} */
+    public static function decodeWriteSingleResponse(string $frame, int $slave): array
+    {
+        if (!Crc16::valid($frame) || strlen($frame) !== 8 || ord($frame[0]) !== $slave) {
+            throw new ModbusException('Ugyldigt FC06-svar, slave-ID eller CRC.');
+        }
+        $function=ord($frame[1]);
+        if (($function & 0x80) !== 0) throw new ModbusException('Modbus exception code '.ord($frame[2]));
+        if ($function !== 6) throw new ModbusException('Uventet funktionskode efter write.');
+        $decoded=unpack('naddress/nvalue',substr($frame,2,4));
+        return ['address'=>(int)$decoded['address'],'value'=>(int)$decoded['value']];
+    }
+
     /** @return list<int> */
     public static function decodeReadResponse(string $frame, int $slave, int $function): array
     {
