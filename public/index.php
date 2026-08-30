@@ -31,7 +31,7 @@ $state += ['pv_power_w'=>0,'load_power_w'=>0,'battery_power_w'=>0,'battery_soc_p
 if ($path === '/healthz' || $path === '/api/v1/health') {
     header('Content-Type: application/json; charset=utf-8');
     http_response_code($online ? 200 : 503);
-    echo json_encode(['status' => $online ? 'ok' : 'stale', 'mode' => $mode, 'data_age_seconds' => $age, 'writes_enabled' => false, 'server_timestamp' => gmdate(DATE_ATOM)], JSON_THROW_ON_ERROR);
+    echo json_encode(['status' => $online ? 'ok' : 'stale', 'mode' => $mode, 'data_age_seconds' => $age, 'writes_enabled' => Env::bool('WRITES_ENABLED',false), 'commissioning_writes_enabled'=>Env::bool('COMMISSIONING_WRITES_ENABLED',false), 'automation_mode'=>Env::get('AUTOMATION_MODE','shadow'), 'server_timestamp' => gmdate(DATE_ATOM)], JSON_THROW_ON_ERROR);
     exit;
 }
 if ($path === '/api/v1/state') {

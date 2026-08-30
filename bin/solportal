@@ -45,7 +45,7 @@ try {
         case 'health':
             $state = (new StateRepository(Connection::get()))->current();
             $age = isset($state['received_timestamp']) ? time() - strtotime($state['received_timestamp']) : null;
-            echo json_encode(['status'=>$age !== null && $age < 30 ? 'ok' : 'stale','mode'=>Env::get('DEVICE_MODE','growatt'),'data_age_seconds'=>$age,'writes_enabled'=>false,'time'=>gmdate(DATE_ATOM)], JSON_PRETTY_PRINT) . PHP_EOL; break;
+            echo json_encode(['status'=>$age !== null && $age < 30 ? 'ok' : 'stale','mode'=>Env::get('DEVICE_MODE','growatt'),'data_age_seconds'=>$age,'writes_enabled'=>Env::bool('WRITES_ENABLED',false),'commissioning_writes_enabled'=>Env::bool('COMMISSIONING_WRITES_ENABLED',false),'time'=>gmdate(DATE_ATOM)], JSON_PRETTY_PRINT) . PHP_EOL; break;
         case 'test': require SOLPORTAL_ROOT . '/tests/run.php'; break;
         case 'serial:list': foreach (glob('/dev/serial/by-id/*') ?: glob('/dev/ttyUSB*') ?: [] as $device) echo $device . PHP_EOL; break;
         case 'worker:device': (new DeviceWorker())->run(in_array('--once', $argv, true)); break;
