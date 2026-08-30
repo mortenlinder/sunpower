@@ -20,7 +20,7 @@ use Solportalen\Energy\Planning\PlanService;
 
 $command = $argv[1] ?? 'help';
 if (in_array('--help', $argv, true) || $command === 'help') {
-    echo "Solportalen CLI\n\napp:key database:migrate database:status user:create-admin demo:seed worker:device worker:mqtt scheduler:run supplier:refresh serial:list serial:test modbus:read modbus:dump modbus:holding commissioning:mode-test commissioning:load-first profile:list profile:validate profile:import optimizer:run telemetry:aggregate retention:run backup:create health simulator:start test\n";
+    echo "Solportalen CLI\n\napp:key database:migrate database:status user:create-admin demo:seed worker:device worker:mqtt scheduler:run supplier:refresh serial:list serial:test modbus:read modbus:dump modbus:holding commissioning:mode-test commissioning:load-first commissioning:restore-snapshot profile:list profile:validate profile:import optimizer:run telemetry:aggregate retention:run backup:create health simulator:start test\n";
     exit(0);
 }
 try {
@@ -65,12 +65,16 @@ try {
                 if(file_put_contents($temporary,$json,LOCK_EX)===false||!rename($temporary,$target))throw new RuntimeException('Commissioning-snapshot kunne ikke gemmes.');
             }
             echo $json;break;
-        case 'commissioning:mode-test': case 'commissioning:load-first':
+        case 'commissioning:mode-test': case 'commissioning:load-first': case 'commissioning:restore-snapshot':
             if(!Env::bool('WRITES_ENABLED')||!Env::bool('COMMISSIONING_WRITES_ENABLED'))throw new RuntimeException('Både WRITES_ENABLED og COMMISSIONING_WRITES_ENABLED skal være true.');
             if(!in_array('--confirm=LOCAL_MODBUS_WRITE_TEST',$argv,true))throw new RuntimeException('Manglende eksplicit bekræftelse: --confirm=LOCAL_MODBUS_WRITE_TEST');
             $transport=new LinuxSerialTransport(Env::get('SERIAL_DEVICE','/dev/ttyUSB0'),(int)Env::get('SERIAL_BAUD','9600'));
             $control=new GrowattSphControl($transport,(int)Env::get('SERIAL_SLAVE_ID','1'),true);
-            try{$result=$command==='commissioning:load-first'?$control->setLoadFirst():$control->testMode((string)($argv[2]??''),(int)($argv[3]??30));}
+            try{
+                if($command==='commissioning:load-first')$result=$control->setLoadFirst();
+                elseif($command==='commissioning:restore-snapshot'){$file=SOLPORTAL_ROOT.'/var/commissioning-growatt-holding.json';if(!is_file($file))throw new RuntimeException('Det gemte commissioning-snapshot findes ikke.');$snapshot=json_decode((string)file_get_contents($file),true,64,JSON_THROW_ON_ERROR);$result=$control->restoreSnapshot($snapshot['raw']??[]);}
+                else$result=$control->testMode((string)($argv[2]??''),(int)($argv[3]??30));
+            }
             catch(Throwable $writeError){$audit=Connection::get()->prepare('INSERT INTO audit_log(actor,action,object_type,object_id,before_json,after_json,reason,ip_address,correlation_id,created_at) VALUES("local-cli",?,"growatt",NULL,NULL,?,"Fejlet lokal Modbus commissioning",NULL,UUID(),UTC_TIMESTAMP(6))');$audit->execute([$command,json_encode(['status'=>'failed','error'=>$writeError->getMessage()],JSON_THROW_ON_ERROR)]);throw$writeError;}
             $audit=Connection::get()->prepare('INSERT INTO audit_log(actor,action,object_type,object_id,before_json,after_json,reason,ip_address,correlation_id,created_at) VALUES("local-cli",?,"growatt",NULL,NULL,?,"Verificeret lokal Modbus commissioning",NULL,UUID(),UTC_TIMESTAMP(6))');
             $audit->execute([$command,json_encode($result,JSON_THROW_ON_ERROR)]);

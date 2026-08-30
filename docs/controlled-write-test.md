@@ -45,3 +45,9 @@ Hvis den normale konfiguration ikke er genetableret, kan Load First sættes eksp
 ```sh
 sudo -u solportal php /opt/solportalen/bin/solportal commissioning:load-first --confirm=LOCAL_MODBUS_WRITE_TEST
 ```
+
+Et tidligere gemt commissioning-snapshot kan gendannes og verificeres med:
+
+```sh
+sudo -u solportal php /opt/solportalen/bin/solportal commissioning:restore-snapshot --confirm=LOCAL_MODBUS_WRITE_TEST
+```

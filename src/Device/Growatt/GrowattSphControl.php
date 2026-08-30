@@ -48,6 +48,20 @@ final class GrowattSphControl
         return ['mode'=>'load_first','priority_code'=>$priority,'before'=>$this->selected($before),'after'=>$this->selected($this->readHolding(1070,39)),'verified'=>true,'completed_at'=>gmdate(DATE_ATOM)];
     }
 
+    /** @param array<int|string,mixed> $raw */
+    public function restoreSnapshot(array $raw):array
+    {
+        $target=[];
+        foreach(range(1070,1108)as$address){
+            $value=$raw[$address]??$raw[(string)$address]??null;
+            if(!is_int($value)||$value<0||$value>65535)throw new RuntimeException("Snapshot mangler en gyldig værdi for register $address.");
+            $target[$address]=$value;
+        }
+        $before=$this->readHolding(1070,39);$this->restore($target);sleep(2);$after=$this->readHolding(1070,39);
+        foreach(self::MANAGED_REGISTERS as$address){if($after[$address]!==$target[$address])throw new RuntimeException("Snapshot-restore kunne ikke verificeres for register $address.");}
+        return ['restored_from_snapshot'=>true,'priority_code'=>$this->readPriority(),'before'=>$this->selected($before),'after'=>$this->selected($after),'verified'=>true,'completed_at'=>gmdate(DATE_ATOM)];
+    }
+
     /** @param array<int,int> $baseline */
     private function applyTestMode(string $mode,array $baseline):void
     {
