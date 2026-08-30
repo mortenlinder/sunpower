@@ -45,7 +45,8 @@ final class PlanService
         $plan=$this->pdo->query('SELECT p.*,a.approved_at,a.expires_at,a.approved_by,a.status approval_status FROM plans p LEFT JOIN plan_approvals a ON a.plan_id=p.id ORDER BY p.id DESC LIMIT 1')->fetch();if(!$plan)return [];
         $statement=$this->pdo->prepare('SELECT starts_at,ends_at,action,power_w,soc_before,soc_after,buy_price,baseline_cost,optimized_cost,explanation,confidence FROM plan_intervals WHERE plan_id=? ORDER BY starts_at');$statement->execute([$plan['id']]);$rows=$statement->fetchAll();
         $mode=$this->pdo->query("SELECT state_value FROM operational_state WHERE state_key='requested_battery_mode'")->fetchColumn();
-        $plan['intervals']=$rows;$plan['horizon_hours']=$rows===[]?0:round((strtotime(end($rows)['ends_at'])-strtotime($rows[0]['starts_at']))/3600,1);$plan['action_intervals']=count(array_filter($rows,fn($r)=>$r['action']!=='hold'));$plan['csrf_token']=self::csrfToken();$plan['requested_battery_mode']=$mode?:'load_first';return $plan;
+        $command=$this->pdo->prepare("SELECT id,status,error_message,completed_at FROM commands WHERE command_type='apply_approved_plan' AND JSON_UNQUOTE(JSON_EXTRACT(payload_json,'$.plan_id'))=? ORDER BY id DESC LIMIT 1");$command->execute([(string)$plan['id']]);
+        $plan['intervals']=$rows;$plan['horizon_hours']=$rows===[]?0:round((strtotime(end($rows)['ends_at'])-strtotime($rows[0]['starts_at']))/3600,1);$plan['action_intervals']=count(array_filter($rows,fn($r)=>$r['action']!=='hold'));$plan['csrf_token']=self::csrfToken();$plan['requested_battery_mode']=$mode?:'load_first';$plan['writes_enabled']=Env::bool('WRITES_ENABLED');$plan['apply_command']=$command->fetch()?:null;return $plan;
     }
 
     public function approve(int $planId,string $token,string $approvedBy): array
@@ -66,6 +67,15 @@ final class PlanService
         $count=$this->pdo->exec("UPDATE plan_approvals SET status='expired' WHERE status='approved_shadow' AND expires_at IS NOT NULL AND expires_at<=UTC_TIMESTAMP(6)");
         if($count>0)$this->pdo->exec("INSERT INTO operational_state(state_key,state_value,reason,updated_at) VALUES('requested_battery_mode','load_first','Den manuelt godkendte plan er udløbet',UTC_TIMESTAMP(6)) ON DUPLICATE KEY UPDATE state_value=VALUES(state_value),reason=VALUES(reason),updated_at=VALUES(updated_at)");
         return (int)$count;
+    }
+
+    public function queueApply(int$planId,string$token,string$actor):array
+    {
+        if(!Env::bool('WRITES_ENABLED'))throw new RuntimeException('Write-kanalen er ikke aktiveret.');
+        if(!hash_equals(self::csrfToken(),$token)&&!hash_equals(self::csrfToken('-1 day'),$token))throw new RuntimeException('Ugyldigt godkendelsestoken. Genindlæs siden.');
+        $check=$this->pdo->prepare("SELECT p.id FROM plans p JOIN plan_approvals a ON a.plan_id=p.id WHERE p.id=? AND a.status='approved_shadow' AND a.expires_at>UTC_TIMESTAMP(6)");$check->execute([$planId]);if(!$check->fetchColumn())throw new RuntimeException('Planen skal være aktuelt godkendt før anvendelse.');
+        $key='manual-plan-'.$planId.'-'.bin2hex(random_bytes(8));$insert=$this->pdo->prepare("INSERT INTO commands(command_type,payload_json,status,requested_by,reason,idempotency_key,created_at) VALUES('apply_approved_plan',?,'pending',NULL,?,?,UTC_TIMESTAMP(6))");$insert->execute([json_encode(['plan_id'=>$planId,'actor'=>$actor],JSON_THROW_ON_ERROR),'Manuel anvendelse af godkendt plan',$key]);
+        return['command_id'=>(int)$this->pdo->lastInsertId(),'plan_id'=>$planId,'status'=>'pending','automatic_replanning'=>false];
     }
 
     public static function csrfToken(string $modify='now'): string{return hash_hmac('sha256',(new DateTimeImmutable($modify,new DateTimeZone('UTC')))->format('Y-m-d'),(string)Env::get('APP_KEY','development-only'));}

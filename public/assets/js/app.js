@@ -104,15 +104,20 @@ function renderPlan(plan) {
     document.querySelector('#plan-active-count').textContent=plan.action_intervals;
     document.querySelector('#plan-explanation').textContent=plan.explanation;
     const active=rows.filter(row=>row.action!=='hold');document.querySelector('#plan-rows').innerHTML=(active.length?active:rows.slice(0,8)).map(row=>`<tr><td>${new Date(row.starts_at+'Z').toLocaleString('da-DK',{weekday:'short',hour:'2-digit',minute:'2-digit'})}</td><td><span class="action-pill ${row.action}">${actionName(row.action)}</span></td><td>${Number(row.power_w)?fmt(row.power_w):'—'}</td><td>${Number(row.soc_before).toFixed(0)} → ${Number(row.soc_after).toFixed(0)} %</td><td>${Number(row.buy_price).toLocaleString('da-DK',{minimumFractionDigits:2,maximumFractionDigits:2})}</td><td>${row.explanation}</td></tr>`).join('');
-    const button=document.querySelector('#approve-plan');button.disabled=false;button.dataset.planId=plan.id;button.dataset.token=plan.csrf_token;
-    if(plan.approval_status==='approved_shadow'){button.textContent='Plan gemt og godkendt';button.classList.add('approved');button.disabled=true;document.querySelector('#approval-title').textContent='Godkendt plan';document.querySelector('#approval-copy').textContent=`Gyldig til ${new Date(plan.expires_at+'Z').toLocaleString('da-DK')}. Derefter skiftes automatisk til Load First.`}
+    const button=document.querySelector('#approve-plan'),apply=document.querySelector('#apply-plan');button.disabled=false;button.dataset.planId=plan.id;button.dataset.token=plan.csrf_token;apply.disabled=true;
+    if(plan.approval_status==='approved_shadow'){button.textContent='Plan gemt og godkendt';button.classList.add('approved');button.disabled=true;apply.disabled=!plan.writes_enabled;document.querySelector('#approval-title').textContent='Godkendt plan';document.querySelector('#approval-copy').textContent=`Gyldig til ${new Date(plan.expires_at+'Z').toLocaleString('da-DK')}. Manuel anvendelse styrer højst 24 timer og falder derefter tilbage til Load First.`}
+    if(plan.apply_command?.status==='pending'||plan.apply_command?.status==='claimed'){apply.disabled=true;apply.textContent='Sender til inverter…'}
+    if(plan.apply_command?.status==='verified'){apply.disabled=true;apply.textContent='Anvendt på inverter';document.querySelector('#approval-copy').textContent='Growatt-vinduerne er skrevet og verificeret. Automatisk replanning er ikke aktiv.'}
+    if(plan.apply_command?.status==='failed'){apply.disabled=false;apply.textContent='Prøv anvendelse igen';document.querySelector('#approval-copy').textContent=plan.apply_command.error_message||'Anvendelsen fejlede og blev rullet tilbage.'}
     if(plan.approval_status==='expired'){button.textContent='Planen er udløbet';button.classList.remove('approved');button.disabled=true;document.querySelector('#approval-title').textContent='Load First er aktiv';document.querySelector('#approval-copy').textContent='Planens gyldighed er slut. Sikker fallback er registreret som Load First.'}
     drawPlan(plan);
 }
 
 async function refreshPlan(){try{const response=await fetch('/api/v1/plans/latest',{cache:'no-store'});if(response.ok)renderPlan(await response.json())}catch{/* Forecast timer may not have generated its first plan yet. */}}
 
-async function approvePlan(){const button=document.querySelector('#approve-plan');if(!currentPlan||button.disabled)return;button.disabled=true;button.textContent='Gemmer godkendelse…';try{const response=await fetch(`/api/v1/plans/${currentPlan.id}/approve`,{method:'POST',headers:{'X-Solportal-Token':currentPlan.csrf_token,'Content-Type':'application/json'},body:'{}'});const result=await response.json();if(!response.ok)throw new Error(result.error||'Godkendelsen fejlede');button.textContent='Plan gemt og godkendt';button.classList.add('approved');document.querySelector('#approval-title').textContent='Godkendt plan';document.querySelector('#approval-copy').textContent=`Gyldig til ${new Date(result.expires_at).toLocaleString('da-DK')}. Derefter Load First.`}catch(error){button.disabled=false;button.textContent='Prøv godkendelse igen';document.querySelector('#approval-copy').textContent=error.message}}
+async function approvePlan(){const button=document.querySelector('#approve-plan');if(!currentPlan||button.disabled)return;button.disabled=true;button.textContent='Gemmer godkendelse…';try{const response=await fetch(`/api/v1/plans/${currentPlan.id}/approve`,{method:'POST',headers:{'X-Solportal-Token':currentPlan.csrf_token,'Content-Type':'application/json'},body:'{}'});const result=await response.json();if(!response.ok)throw new Error(result.error||'Godkendelsen fejlede');button.textContent='Plan gemt og godkendt';button.classList.add('approved');document.querySelector('#apply-plan').disabled=false;document.querySelector('#approval-title').textContent='Godkendt plan';document.querySelector('#approval-copy').textContent=`Gyldig til ${new Date(result.expires_at).toLocaleString('da-DK')}. Du kan nu anvende den manuelt på inverteren.`}catch(error){button.disabled=false;button.textContent='Prøv godkendelse igen';document.querySelector('#approval-copy').textContent=error.message}}
+
+async function applyPlan(){const button=document.querySelector('#apply-plan');if(!currentPlan||button.disabled)return;button.disabled=true;button.textContent='Sender til inverter…';try{const response=await fetch(`/api/v1/plans/${currentPlan.id}/apply`,{method:'POST',headers:{'X-Solportal-Token':currentPlan.csrf_token,'Content-Type':'application/json'},body:'{}'});const result=await response.json();if(!response.ok)throw new Error(result.error||'Planen kunne ikke sendes');document.querySelector('#approval-copy').textContent=`Kommando #${result.command_id} er sendt til den lokale worker. Ingen automatisk replanning.`;setTimeout(refreshPlan,7000)}catch(error){button.disabled=false;button.textContent='Prøv anvendelse igen';document.querySelector('#approval-copy').textContent=error.message}}
 
 async function refreshInsights() {
     try {
@@ -172,6 +177,7 @@ async function refresh() {
         document.querySelector('#flow-battery-value').textContent = fmt(state.battery_power_w);
         document.querySelector('#flow-grid-value').textContent = fmt(state.grid_power_w);
         document.querySelector('#updated-time').textContent = new Date().toLocaleTimeString('da-DK', {hour: '2-digit', minute: '2-digit', second: '2-digit'});
+        const modeName={load_first:'Load First',battery_first:'Battery First',grid_first:'Grid First',unknown:'Ukendt mode'}[state.priority_mode]||'Mode afventer';document.querySelector('#inverter-state').textContent=`${modeName} · VPP`;
         describe(state);
         animateFlows(state);
         const fresh = payload.data_age_seconds !== null && payload.data_age_seconds < 30;
@@ -196,5 +202,6 @@ setInterval(refreshInsights, 15 * 60 * 1000);
 refreshPlan();
 setInterval(refreshPlan, 15 * 60 * 1000);
 document.querySelector('#approve-plan')?.addEventListener('click',approvePlan);
+document.querySelector('#apply-plan')?.addEventListener('click',applyPlan);
 addEventListener('resize', draw);
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/service-worker.js');

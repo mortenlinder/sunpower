@@ -68,6 +68,11 @@ if (preg_match('#^/api/v1/plans/(\d+)/approve$#',$path,$match)===1 && ($_SERVER[
         echo json_encode((new PlanService(Connection::get()))->approve((int)$match[1],$token,$actor),JSON_THROW_ON_ERROR);
     } catch (Throwable $error) { http_response_code(422); echo json_encode(['error'=>$error->getMessage()],JSON_THROW_ON_ERROR); } exit;
 }
+if (preg_match('#^/api/v1/plans/(\d+)/apply$#',$path,$match)===1 && ($_SERVER['REQUEST_METHOD']??'GET')==='POST') {
+    header('Content-Type: application/json; charset=utf-8');
+    try{$token=(string)($_SERVER['HTTP_X_SOLPORTAL_TOKEN']??'');$actor=(string)($_SERVER['REMOTE_ADDR']??'local');echo json_encode((new PlanService(Connection::get()))->queueApply((int)$match[1],$token,$actor),JSON_THROW_ON_ERROR);}
+    catch(Throwable$error){http_response_code(422);echo json_encode(['error'=>$error->getMessage()],JSON_THROW_ON_ERROR);}exit;
+}
 if (str_starts_with($path, '/api/')) {
     http_response_code(404); header('Content-Type: application/json'); echo '{"error":"Endpoint findes ikke"}'; exit;
 }

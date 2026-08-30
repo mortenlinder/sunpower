@@ -16,6 +16,7 @@ final class GrowattSphReader
     {
         $base = $this->read(0, 50);
         $hybrid = $this->read(1000, 50);
+        $priority = $this->read(118, 1)[0] ?? null;
         $now = gmdate(DATE_ATOM);
         $charge = $this->u32($hybrid, 11) * 0.1;
         $discharge = $this->u32($hybrid, 9) * 0.1;
@@ -25,6 +26,8 @@ final class GrowattSphReader
             'device_online' => true,
             'device_status_code' => $base[0] ?? null,
             'device_mode' => 'growatt_modbus_rtu',
+            'priority_code' => $priority,
+            'priority_mode' => match($priority){0=>'load_first',1=>'battery_first',2=>'grid_first',default=>'unknown'},
             'pv_power_w' => $this->u32($base, 1) * 0.1,
             'pv1_voltage_v' => ($base[3] ?? 0) * 0.1,
             'pv1_current_a' => ($base[4] ?? 0) * 0.1,

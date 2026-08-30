@@ -11,7 +11,7 @@ $writesEnabled = Solportalen\Config\Env::bool('WRITES_ENABLED', false);
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#06110e"><title>Solportalen</title>
-  <link rel="manifest" href="/manifest.webmanifest"><link rel="stylesheet" href="/assets/css/app.css"><link rel="stylesheet" href="/assets/css/insights.css"><link rel="stylesheet" href="/assets/css/learning.css"><link rel="stylesheet" href="/assets/css/plan.css">
+  <link rel="manifest" href="/manifest.webmanifest"><link rel="stylesheet" href="/assets/css/app.css"><link rel="stylesheet" href="/assets/css/insights.css"><link rel="stylesheet" href="/assets/css/learning.css"><link rel="stylesheet" href="/assets/css/plan.css"><link rel="stylesheet" href="/assets/css/control.css">
   <script src="/assets/js/app.js" defer></script>
 </head>
 <body class="<?= $wallboard ? 'wallboard' : '' ?>" data-mode="<?= htmlspecialchars($mode, ENT_QUOTES) ?>">
@@ -46,7 +46,7 @@ $writesEnabled = Solportalen\Config\Env::bool('WRITES_ENABLED', false);
       <div class="energy-node node-home"><div class="node-icon">⌂</div><span>Dit hjem</span><b id="flow-load"><?= $kw($state['load_power_w']) ?></b><small>forbrug</small></div>
       <div class="energy-node node-battery"><div class="node-icon battery-gauge"><i id="battery-fill" style="--soc:<?= (float)$state['battery_soc_pct'] ?>%"></i>▣</div><span>Batteri</span><b id="flow-soc"><?= number_format((float)$state['battery_soc_pct'], 0) ?> %</b><small id="flow-battery-value"><?= $kw($state['battery_power_w']) ?></small></div>
       <div class="energy-node node-grid"><div class="node-icon">⇅</div><span>Offentligt net</span><b id="flow-grid-value"><?= $kw($state['grid_power_w']) ?></b><small id="flow-grid-label"><?= $state['grid_power_w'] >= 0 ? 'import' : 'eksport' ?></small></div>
-      <div class="inverter studio"><div class="inverter-halo"></div><img src="/assets/images/growatt-inverter-studio.png" alt="Growatt hybridinverter"><div class="inverter-chip"><i></i><span><b>Growatt SPH</b><small id="inverter-state">Online · VPP mode</small></span></div></div>
+      <div class="inverter studio"><div class="inverter-halo"></div><img src="/assets/images/growatt-inverter-studio.png" alt="Growatt hybridinverter"><div class="inverter-chip"><i></i><span><b>Growatt SPH</b><small id="inverter-state"><?= htmlspecialchars(match($state['priority_mode']??'unknown'){'load_first'=>'Load First','battery_first'=>'Battery First','grid_first'=>'Grid First',default=>'Mode afventer'},ENT_QUOTES) ?> · VPP</small></span></div></div>
     </div>
     <div class="flow-caption"><span class="pulse-ring"></span><div><b id="battery-state"><?= $batteryText ?></b><small id="grid-state"><?= $gridText ?></small></div><em>Live analyse</em></div>
   </section>
@@ -62,7 +62,7 @@ $writesEnabled = Solportalen\Config\Env::bool('WRITES_ENABLED', false);
     <div class="plan-chart-wrap"><canvas id="plan-chart" height="230" aria-label="Batteriplan med pris og SOC"></canvas></div>
     <div class="plan-actions-legend"><span class="charge">Oplad</span><span class="solar-charge">Gem sol</span><span class="hold">Hold</span><span class="discharge">Aflad</span><span class="soc">SOC</span></div>
     <div class="plan-table-wrap"><table><thead><tr><th>Tid</th><th>Handling</th><th>Effekt</th><th>SOC</th><th>Pris</th><th>Begrundelse</th></tr></thead><tbody id="plan-rows"><tr><td colspan="6">Afventer første komplette plan…</td></tr></tbody></table></div>
-    <div class="approval-panel"><div><span class="approval-icon">✓</span><div><b id="approval-title">Gennemse og gem planen</b><small id="approval-copy">Planen får en fast udløbstid. Derefter vælges Load First automatisk.</small></div></div><button id="approve-plan" type="button" disabled>Gem og godkend planen</button></div>
+    <div class="approval-panel"><div><span class="approval-icon">✓</span><div><b id="approval-title">Gennemse og gem planen</b><small id="approval-copy">Planen får en fast udløbstid. Derefter vælges Load First automatisk.</small></div></div><div class="approval-buttons"><button id="approve-plan" type="button" disabled>Gem og godkend planen</button><button id="apply-plan" type="button" disabled>Anvend på inverter</button></div></div>
   </section>
 
   <section class="lower-grid" id="historik">

@@ -63,6 +63,28 @@ final class GrowattSphControl
         return ['restored_from_snapshot'=>true,'priority_code'=>$this->readPriority(),'before'=>$this->selected($before),'after'=>$this->selected($after),'verified'=>true,'completed_at'=>gmdate(DATE_ATOM)];
     }
 
+    /** @param array{grid_periods:list<array{start:int,stop:int,enabled:int}>,battery_periods:list<array{start:int,stop:int,enabled:int}>,discharge_power_pct:int,stop_soc_pct:int,charge_power_pct:int,charge_stop_soc_pct:int,ac_charge_enabled:int} $schedule */
+    public function applySchedule(array $schedule):array
+    {
+        $baseline=$this->readHolding(1070,39);
+        try{
+            foreach(self::PERIOD_STARTS as$start)$this->writePeriod($start,$baseline[$start],$baseline[$start+1],0);
+            $this->writeVerified(1092,0);
+            $this->writeVerified(1070,$this->percent($schedule['discharge_power_pct']));
+            $this->writeVerified(1071,$this->percent($schedule['stop_soc_pct']));
+            $this->writeVerified(1090,$this->percent($schedule['charge_power_pct']));
+            $this->writeVerified(1091,$this->percent($schedule['charge_stop_soc_pct']));
+            foreach([[1080,$schedule['grid_periods']],[1100,$schedule['battery_periods']]]as[$base,$periods]){
+                for($slot=0;$slot<3;$slot++){$period=$periods[$slot]??['start'=>0,'stop'=>0,'enabled'=>0];$this->writePeriod($base+$slot*3,(int)$period['start'],(int)$period['stop'],(int)$period['enabled']);}
+            }
+            $this->writeVerified(1092,(int)$schedule['ac_charge_enabled']);
+        }catch(\Throwable$error){$this->restore($baseline);throw$error;}
+        $after=$this->readHolding(1070,39);
+        return ['applied'=>true,'priority_code'=>$this->readPriority(),'before'=>$this->selected($baseline),'after'=>$this->selected($after),'verified'=>true,'completed_at'=>gmdate(DATE_ATOM)];
+    }
+
+    private function percent(mixed $value):int{$value=(int)$value;if($value<0||$value>100)throw new RuntimeException('Procentværdi skal være 0-100.');return$value;}
+
     /** @param array<int,int> $baseline */
     private function applyTestMode(string $mode,array $baseline):void
     {
