@@ -35,8 +35,9 @@ id solportal >/dev/null 2>&1 || useradd --system --home "$APP_DIR" --shell /usr/
 usermod -a -G dialout,solportal-app solportal
 usermod -a -G solportal-app www-data
 
-mkdir -p "$APP_DIR" "$APP_DIR/var"
+mkdir -p "$APP_DIR"
 rsync -a --delete --exclude='.git/' --exclude='.env' "$SOURCE_DIR/" "$APP_DIR/"
+mkdir -p "$APP_DIR/var"
 
 mariadb --protocol=socket <<SQL
 CREATE DATABASE IF NOT EXISTS ${DB_NAME} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
