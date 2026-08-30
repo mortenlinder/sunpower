@@ -134,6 +134,9 @@ ensure_env CURRENT_SUPPLIER_ENERGY_DKK_KWH_EX_VAT 0.70
 ensure_env CURRENT_SUPPLIER_SUBSCRIPTION_DKK_MONTH_EX_VAT 0
 ensure_env SUPPLIER_COMPARISON_SPOT_DKK_KWH_EX_VAT 0.70
 ensure_env COMMISSIONING_WRITES_ENABLED false
+ensure_env OCPP_PORT 9000
+ensure_env OCPP_USER teison
+ensure_env OCPP_PASSWORD "$(od -An -N18 -tx1 /dev/urandom | tr -d ' \n')"
 
 chown -R root:solportal-app "$APP_DIR"
 chown solportal:solportal-app "$APP_DIR/var"
@@ -152,6 +155,7 @@ apache2ctl configtest
 install -m 0644 "$APP_DIR/systemd/solportal-device.service" /etc/systemd/system/solportal-device.service
 install -m 0644 "$APP_DIR/systemd/solportal-forecast.service" /etc/systemd/system/solportal-forecast.service
 install -m 0644 "$APP_DIR/systemd/solportal-forecast.timer" /etc/systemd/system/solportal-forecast.timer
+install -m 0644 "$APP_DIR/systemd/solportal-ocpp.service" /etc/systemd/system/solportal-ocpp.service
 systemctl daemon-reload
 
 runuser -u solportal -- php "$APP_DIR/bin/solportal" database:migrate
@@ -169,6 +173,7 @@ runuser -u solportal -- php "$APP_DIR/bin/solportal" scheduler:run
 
 systemctl enable --now solportal-device.service
 systemctl enable --now solportal-forecast.timer
+systemctl enable --now solportal-ocpp.service
 systemctl restart apache2
 
 echo

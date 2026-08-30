@@ -1,0 +1,13 @@
+[Unit]
+Description=Solportalen OCPP 1.6J worker
+After=network-online.target mariadb.service
+[Service]
+Type=simple
+User=solportal
+Group=solportal-app
+WorkingDirectory=/opt/solportalen
+ExecStart=/usr/bin/php /opt/solportalen/bin/solportal worker:ocpp
+Restart=always
+RestartSec=3
+[Install]
+WantedBy=multi-user.target
