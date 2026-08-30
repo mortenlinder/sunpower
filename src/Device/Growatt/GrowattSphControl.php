@@ -10,6 +10,7 @@ use Solportalen\Device\Serial\LinuxSerialTransport;
 final class GrowattSphControl
 {
     private const ENABLE_REGISTERS=[1082,1085,1088,1102,1105,1108];
+    private const TIME_REGISTERS=[1080,1081,1100,1101];
     private const MANAGED_REGISTERS=[1070,1071,1080,1081,1082,1085,1088,1090,1091,1092,1100,1101,1102,1105,1108];
     private const PRIORITIES=['load_first'=>0,'battery_first'=>1,'grid_first'=>2];
 
@@ -93,16 +94,23 @@ final class GrowattSphControl
         // de fleste registre allerede identiske med baseline.
         $before=$this->readHolding($address,1)[$address];
         if($before===$value)return;
-        $request=RtuCodec::writeSingleRequest($this->slaveId,$address,$value,$this->writesEnabled);
-        $echo=RtuCodec::decodeWriteSingleResponse($this->transport->exchange($request),$this->slaveId);
-        if($echo!==['address'=>$address,'value'=>$value])throw new RuntimeException("FC06-ekko matchede ikke register $address.");
+        if(in_array($address,self::TIME_REGISTERS,true)){
+            $request=RtuCodec::writeMultipleRequest($this->slaveId,$address,[$value],$this->writesEnabled);
+            $echo=RtuCodec::decodeWriteMultipleResponse($this->transport->exchange($request),$this->slaveId);
+            if($echo!==['address'=>$address,'count'=>1])throw new RuntimeException("FC16-ekko matchede ikke register $address.");
+        }else{
+            $request=RtuCodec::writeSingleRequest($this->slaveId,$address,$value,$this->writesEnabled);
+            $echo=RtuCodec::decodeWriteSingleResponse($this->transport->exchange($request),$this->slaveId);
+            if($echo!==['address'=>$address,'value'=>$value])throw new RuntimeException("FC06-ekko matchede ikke register $address.");
+        }
         $actual=null;
         for($attempt=1;$attempt<=8;$attempt++){
             usleep(150000);
             $actual=$this->readHolding($address,1)[$address];
             if($actual===$value)return;
         }
-        throw new RuntimeException("FC03-readback fejlede for register $address: forventede $value, læste $actual (før write: $before).");
+        $function=in_array($address,self::TIME_REGISTERS,true)?'FC16':'FC06';
+        throw new RuntimeException("FC03-readback efter $function fejlede for register $address: forventede $value, læste $actual (før write: $before).");
     }
 
     /** @return array<int,int> */

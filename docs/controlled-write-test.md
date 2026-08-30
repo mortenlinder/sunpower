@@ -9,7 +9,7 @@ Testkommandoen er bevidst kun til lokal commissioning. Den kræver to miljølås
 - Testvarighed er mindst 10 og højst 120 sekunder.
 - Load First opnås ved at deaktivere alle Grid First- og Battery First-enable-registre samt AC Charge.
 - Kun register 1070, 1071, 1080, 1081, 1082, 1085, 1088, 1090, 1091, 1092, 1100, 1101, 1102, 1105 og 1108 er på whitelisten.
-- Registre, der allerede har den ønskede værdi, skrives ikke igen. Efter en FC06-write forsøges FC03-readback op til otte gange med kort forsinkelse.
+- Registre, der allerede har den ønskede værdi, skrives ikke igen. Tidsregistrene 1080, 1081, 1100 og 1101 skrives med FC16, fordi den konkrete SPH kvitterede for FC06 uden at anvende værdien. Øvrige whitelisted registre bruger FC06. Efter hver write forsøges FC03-readback op til otte gange med kort forsinkelse.
 
 ## Forberedelse
 
