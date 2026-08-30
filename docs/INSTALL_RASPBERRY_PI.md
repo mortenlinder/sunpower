@@ -44,6 +44,7 @@ sudo systemctl status solportal-forecast.timer --no-pager
 sudo journalctl -u solportal-device -n 50 --no-pager
 sudo journalctl -u solportal-forecast -n 50 --no-pager
 curl -s http://127.0.0.1/healthz
+curl -s http://127.0.0.1/api/v1/plans/latest
 hostname -I
 ```
 

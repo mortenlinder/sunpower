@@ -8,6 +8,7 @@ use Solportalen\Database\Connection;
 use Solportalen\Device\Simulator\EnergySimulator;
 use Solportalen\Repository\StateRepository;
 use Solportalen\Repository\InsightRepository;
+use Solportalen\Energy\Planning\PlanService;
 
 header("Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'");
 header('X-Content-Type-Options: nosniff');
@@ -42,6 +43,18 @@ if ($path === '/api/v1/insights') {
     try { echo json_encode((new InsightRepository(Connection::get()))->dashboard(), JSON_THROW_ON_ERROR); }
     catch (Throwable $error) { http_response_code(503); echo json_encode(['error' => 'Prognosedata er ikke klar endnu'], JSON_THROW_ON_ERROR); }
     exit;
+}
+if ($path === '/api/v1/plans/latest' && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET') {
+    header('Content-Type: application/json; charset=utf-8');
+    try { echo json_encode((new PlanService(Connection::get()))->latest(), JSON_THROW_ON_ERROR); }
+    catch (Throwable $error) { http_response_code(503); echo json_encode(['error'=>'Planen er ikke klar endnu'],JSON_THROW_ON_ERROR); } exit;
+}
+if (preg_match('#^/api/v1/plans/(\d+)/approve$#',$path,$match)===1 && ($_SERVER['REQUEST_METHOD']??'GET')==='POST') {
+    header('Content-Type: application/json; charset=utf-8');
+    try {
+        $token=(string)($_SERVER['HTTP_X_SOLPORTAL_TOKEN']??'');$actor=(string)($_SERVER['REMOTE_ADDR']??'local');
+        echo json_encode((new PlanService(Connection::get()))->approve((int)$match[1],$token,$actor),JSON_THROW_ON_ERROR);
+    } catch (Throwable $error) { http_response_code(422); echo json_encode(['error'=>$error->getMessage()],JSON_THROW_ON_ERROR); } exit;
 }
 if (str_starts_with($path, '/api/')) {
     http_response_code(404); header('Content-Type: application/json'); echo '{"error":"Endpoint findes ikke"}'; exit;

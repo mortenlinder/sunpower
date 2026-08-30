@@ -5,6 +5,7 @@ const fmt = value => `${(Math.abs(Number(value) || 0) / 1000).toLocaleString('da
     maximumFractionDigits: 2,
 })} kW`;
 const samples = [];
+let currentPlan = null;
 
 function clock() {
     const element = document.querySelector('#clock');
@@ -80,6 +81,37 @@ function drawPrice(prices) {
     context.beginPath(); values.forEach((value,index) => { const x=left+index*plotWidth/Math.max(1,values.length-1); const y=top+(max-value)/range*plotHeight; index?context.lineTo(x,y):context.moveTo(x,y); }); context.strokeStyle='#43e09a'; context.lineWidth=2; context.stroke();
     context.fillStyle='#789287'; context.fillText('nu',left,height-4); context.fillText('+24 t',left+plotWidth/2-10,height-4); context.fillText('+48 t',width-right-25,height-4);
 }
+
+function actionName(action) {
+    return {charge_grid:'Oplad fra net',charge_solar:'Gem sol',discharge:'Aflad',hold:'Hold'}[action] || action;
+}
+
+function drawPlan(plan) {
+    const canvas=document.querySelector('#plan-chart'), rows=plan?.intervals||[]; if(!canvas||!rows.length)return;
+    const ratio=devicePixelRatio||1,width=canvas.clientWidth,height=230;canvas.width=Math.round(width*ratio);canvas.height=Math.round(height*ratio);const c=canvas.getContext('2d');c.setTransform(ratio,0,0,ratio,0,0);
+    const left=42,right=42,top=12,bottom=25,pw=width-left-right,ph=height-top-bottom,prices=rows.map(r=>Number(r.buy_price)),maxPrice=Math.max(.5,...prices),barWidth=pw/rows.length;
+    c.font='9px system-ui';c.fillStyle='#789287';c.strokeStyle='#234238';for(let i=0;i<4;i++){const y=top+i*ph/3;c.beginPath();c.moveTo(left,y);c.lineTo(width-right,y);c.stroke();c.fillText(`${(maxPrice*(1-i/3)).toFixed(1)}`,2,y+3);c.fillText(`${Math.round(100*(1-i/3))}%`,width-right+7,y+3)}
+    const colors={charge_grid:'rgba(88,168,255,.32)',charge_solar:'rgba(255,200,77,.32)',discharge:'rgba(67,224,154,.3)',hold:'rgba(82,110,99,.1)'};
+    rows.forEach((row,i)=>{const x=left+i*barWidth,y=top+(1-Number(row.buy_price)/maxPrice)*ph;c.fillStyle=colors[row.action]||colors.hold;c.fillRect(x,y,Math.max(1,barWidth),top+ph-y)});
+    c.beginPath();rows.forEach((row,i)=>{const x=left+(i+.5)*barWidth,y=top+(1-Number(row.soc_after)/100)*ph;i?c.lineTo(x,y):c.moveTo(x,y)});c.strokeStyle='#b7e34b';c.lineWidth=2;c.shadowColor='#b7e34b';c.shadowBlur=7;c.stroke();c.shadowBlur=0;
+    c.fillStyle='#789287';['nu','+12 t','+24 t',plan.horizon_hours>30?'+48 t':'slut'].forEach((label,i)=>c.fillText(label,left+i*pw/3-(i?10:0),height-5));
+}
+
+function renderPlan(plan) {
+    currentPlan=plan;const rows=plan?.intervals||[];if(!plan?.id||!rows.length)return;
+    document.querySelector('#plan-saving').textContent=`${Number(plan.expected_saving_dkk).toLocaleString('da-DK',{minimumFractionDigits:2,maximumFractionDigits:2})} kr.`;
+    document.querySelector('#plan-horizon').textContent=`${Number(plan.horizon_hours).toLocaleString('da-DK',{maximumFractionDigits:1})} timer`;
+    document.querySelector('#plan-active-count').textContent=plan.action_intervals;
+    document.querySelector('#plan-explanation').textContent=plan.explanation;
+    const active=rows.filter(row=>row.action!=='hold');document.querySelector('#plan-rows').innerHTML=(active.length?active:rows.slice(0,8)).map(row=>`<tr><td>${new Date(row.starts_at+'Z').toLocaleString('da-DK',{weekday:'short',hour:'2-digit',minute:'2-digit'})}</td><td><span class="action-pill ${row.action}">${actionName(row.action)}</span></td><td>${Number(row.power_w)?fmt(row.power_w):'—'}</td><td>${Number(row.soc_before).toFixed(0)} → ${Number(row.soc_after).toFixed(0)} %</td><td>${Number(row.buy_price).toLocaleString('da-DK',{minimumFractionDigits:2,maximumFractionDigits:2})}</td><td>${row.explanation}</td></tr>`).join('');
+    const button=document.querySelector('#approve-plan');button.disabled=false;button.dataset.planId=plan.id;button.dataset.token=plan.csrf_token;
+    if(plan.approval_status==='approved_shadow'){button.textContent='Plan godkendt · shadow mode';button.classList.add('approved');button.disabled=true;document.querySelector('#approval-title').textContent='Godkendt plan';document.querySelector('#approval-copy').textContent=`Godkendt ${new Date(plan.approved_at+'Z').toLocaleString('da-DK')}. Ingen Modbus-writes udført.`}
+    drawPlan(plan);
+}
+
+async function refreshPlan(){try{const response=await fetch('/api/v1/plans/latest',{cache:'no-store'});if(response.ok)renderPlan(await response.json())}catch{/* Forecast timer may not have generated its first plan yet. */}}
+
+async function approvePlan(){const button=document.querySelector('#approve-plan');if(!currentPlan||button.disabled)return;button.disabled=true;button.textContent='Gemmer godkendelse…';try{const response=await fetch(`/api/v1/plans/${currentPlan.id}/approve`,{method:'POST',headers:{'X-Solportal-Token':currentPlan.csrf_token,'Content-Type':'application/json'},body:'{}'});const result=await response.json();if(!response.ok)throw new Error(result.error||'Godkendelsen fejlede');button.textContent='Plan godkendt · shadow mode';button.classList.add('approved');document.querySelector('#approval-title').textContent='Godkendt plan';document.querySelector('#approval-copy').textContent='Godkendelsen er auditeret. Ingen Modbus-writes er udført.'}catch(error){button.disabled=false;button.textContent='Prøv godkendelse igen';document.querySelector('#approval-copy').textContent=error.message}}
 
 async function refreshInsights() {
     try {
@@ -160,5 +192,8 @@ refresh();
 setInterval(refresh, 5000);
 refreshInsights();
 setInterval(refreshInsights, 15 * 60 * 1000);
+refreshPlan();
+setInterval(refreshPlan, 15 * 60 * 1000);
+document.querySelector('#approve-plan')?.addEventListener('click',approvePlan);
 addEventListener('resize', draw);
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/service-worker.js');

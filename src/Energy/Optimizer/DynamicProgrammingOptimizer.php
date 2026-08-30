@@ -7,41 +7,63 @@ final class DynamicProgrammingOptimizer implements EnergyOptimizerInterface
 {
     public function optimize(array $intervals, array $battery): array
     {
-        $soc = (float) ($battery['soc_pct'] ?? 50);
-        $min = max((float) ($battery['min_soc_pct'] ?? 20), (float) ($battery['reserve_pct'] ?? 20));
-        $max = (float) ($battery['max_soc_pct'] ?? 95);
-        $capacity = (float) ($battery['capacity_kwh'] ?? 6.5);
-        $efficiency = (float) ($battery['round_trip_efficiency'] ?? 0.88);
-        $wear = (float) ($battery['wear_dkk_kwh'] ?? 0.12);
-        $margin = (float) ($battery['margin_dkk_kwh'] ?? 0.15);
-        $prices = array_column($intervals, 'buy_price');
-        $futureHigh = $prices === [] ? 0.0 : max($prices);
-        $result = [];
+        if ($intervals === []) return [];
+        $capacity = max(.5, (float) ($battery['capacity_kwh'] ?? 6.5));
+        $minKwh = $capacity * max((float) ($battery['min_soc_pct'] ?? 20), (float) ($battery['reserve_pct'] ?? 20)) / 100;
+        $maxKwh = $capacity * (float) ($battery['max_soc_pct'] ?? 95) / 100;
+        $startKwh = min($maxKwh, max($minKwh, $capacity * (float) ($battery['soc_pct'] ?? 50) / 100));
+        $step = max(.1, (float) ($battery['step_kwh'] ?? .25));
+        $eta = sqrt(max(.5, min(1.0, (float) ($battery['round_trip_efficiency'] ?? .88))));
+        $wear = max(0, (float) ($battery['wear_dkk_kwh'] ?? .12));
+        $maxChargeKw = max(.1, (float) ($battery['max_charge_w'] ?? 2500) / 1000);
+        $maxDischargeKw = max(.1, (float) ($battery['max_discharge_w'] ?? 2500) / 1000);
+        $allowGridCharge = (bool) ($battery['allow_grid_charge'] ?? true);
+        $levels = [];
+        for ($energy = $minKwh; $energy <= $maxKwh + .0001; $energy += $step) $levels[] = round($energy, 4);
+        $nearest = fn (float $value): float => $levels[array_reduce(array_keys($levels), fn ($best, $i) => abs($levels[$i]-$value)<abs($levels[$best]-$value)?$i:$best, 0)];
+        $start = $nearest($startKwh);
+        $states = [(string) $start => ['cost' => 0.0, 'path' => []]];
         foreach ($intervals as $interval) {
-            $price = (float) $interval['buy_price'];
-            $solar = (float) ($interval['solar_kwh'] ?? 0);
-            $load = (float) ($interval['load_kwh'] ?? 0);
-            $action = 'hold'; $power = 0;
-            $deliveredCost = $price / max(0.01, $efficiency) + $wear;
-            if (($battery['allow_grid_charge'] ?? true) && $soc < $max && $deliveredCost + $margin < $futureHigh && $solar < 0.15) {
-                $action = 'charge'; $power = min((int) ($battery['max_charge_w'] ?? 2500), (int) (($max - $soc) / 100 * $capacity * 4000));
-            } elseif ($soc > $min && $price >= $futureHigh * 0.9 && $load > 0) {
-                $action = 'discharge'; $power = min((int) ($battery['max_discharge_w'] ?? 2500), (int) ($load * 4000));
+            $hours = max(.01, (strtotime((string) $interval['ends_at']) - strtotime((string) $interval['starts_at'])) / 3600);
+            $price = (float) $interval['buy_price']; $load = max(0, (float) ($interval['load_kwh'] ?? 0)); $solar = max(0, (float) ($interval['solar_kwh'] ?? 0));
+            $netLoad = $load - $solar; $solarExcess = max(0, -$netLoad); $houseNeed = max(0, $netLoad);
+            $nextStates = [];
+            foreach ($states as $storedKey => $state) {
+                $stored = (float) $storedKey;
+                foreach ($levels as $target) {
+                    $delta = $target - $stored;
+                    if ($delta > $maxChargeKw * $hours * $eta + .001 || -$delta > $maxDischargeKw * $hours / $eta + .001) continue;
+                    $gridKwh = $houseNeed; $cycled = abs($delta); $action = 'hold'; $powerW = 0;
+                    if ($delta > .01) {
+                        $neededAtAc = $delta / $eta; $fromSolar = min($solarExcess, $neededAtAc); $fromGrid = max(0, $neededAtAc - $fromSolar);
+                        if (!$allowGridCharge && $fromGrid > .001) continue;
+                        $gridKwh += $fromGrid; $action = $fromGrid > .01 ? 'charge_grid' : 'charge_solar'; $powerW = (int) round($neededAtAc / $hours * 1000);
+                    } elseif ($delta < -.01) {
+                        $delivered = min($houseNeed, -$delta * $eta); $gridKwh = max(0, $houseNeed - $delivered); $action = 'discharge'; $powerW = (int) round($delivered / $hours * 1000);
+                    }
+                    $cost = (float) $state['cost'] + $gridKwh * $price + $cycled * $wear;
+                    $key = (string) $target;
+                    if (!isset($nextStates[$key]) || $cost < $nextStates[$key]['cost']) {
+                        $baseline = $houseNeed * $price; $optimized = $gridKwh * $price + $cycled * $wear;
+                        $row = $interval + ['action'=>$action,'power_w'=>$powerW,'soc_before'=>round($stored/$capacity*100,2),'soc_after'=>round($target/$capacity*100,2),'baseline_cost'=>round($baseline,5),'optimized_cost'=>round($optimized,5),'explanation'=>$this->explain($action,$price,$solarExcess),'confidence'=>round(min(.95,max(.45,(float)($interval['confidence']??.7))),3)];
+                        $nextStates[$key] = ['cost'=>$cost,'path'=>[...$state['path'],$row]];
+                    }
+                }
             }
-            $before = $soc;
-            $delta = ($power / 4000) / $capacity * 100;
-            $soc = $action === 'charge' ? min($max, $soc + $delta * sqrt($efficiency)) : ($action === 'discharge' ? max($min, $soc - $delta / sqrt($efficiency)) : $soc);
-            $result[] = $interval + ['action' => $action, 'power_w' => $power, 'soc_before' => round($before, 2), 'soc_after' => round($soc, 2), 'explanation' => $this->explain($action, $price, $futureHigh), 'confidence' => 0.78];
+            $states = $nextStates;
         }
-        return $result;
+        if ($states === []) return [];
+        usort($states, fn ($a,$b) => $a['cost'] <=> $b['cost']);
+        return $states[0]['path'];
     }
 
-    private function explain(string $action, float $price, float $futureHigh): string
+    private function explain(string $action, float $price, float $solarExcess): string
     {
         return match ($action) {
-            'charge' => sprintf('Opladning er rentabel før en forventet pris på %.2f DKK/kWh.', $futureHigh),
-            'discharge' => sprintf('Batteriet dækker huset i en dyr periode (%.2f DKK/kWh).', $price),
-            default => 'Batteriet holdes for at undgå en urentabel cyklus.',
+            'charge_grid' => sprintf('Oplad fra nettet i et billigt interval (%.2f kr./kWh).', $price),
+            'charge_solar' => sprintf('Gem %.2f kWh forventet soloverskud.', $solarExcess),
+            'discharge' => sprintf('Dæk husets forbrug fra batteriet ved %.2f kr./kWh.', $price),
+            default => 'Hold batteriet; en cyklus er ikke økonomisk fordelagtig her.',
         };
     }
 }

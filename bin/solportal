@@ -13,6 +13,7 @@ use Solportalen\Device\Serial\LinuxSerialTransport;
 use Solportalen\Device\Simulator\EnergySimulator;
 use Solportalen\Repository\StateRepository;
 use Solportalen\Integration\Forecast\ExternalDataService;
+use Solportalen\Energy\Planning\PlanService;
 
 $command = $argv[1] ?? 'help';
 if (in_array('--help', $argv, true) || $command === 'help') {
@@ -53,8 +54,10 @@ try {
             $transport = new LinuxSerialTransport(Env::get('SERIAL_DEVICE','/dev/ttyUSB0'), (int) Env::get('SERIAL_BAUD','9600'));
             echo json_encode((new GrowattSphReader($transport, (int) Env::get('SERIAL_SLAVE_ID','1')))->rawSnapshot(), JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR) . PHP_EOL; break;
         case 'scheduler:run':
-            echo json_encode((new ExternalDataService(Connection::get()))->refresh(), JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR) . PHP_EOL; break;
-        case 'worker:mqtt': case 'profile:import': case 'optimizer:run': case 'telemetry:aggregate': case 'retention:run': case 'backup:create': case 'user:create-admin':
+            $pdo=Connection::get();$result=(new ExternalDataService($pdo))->refresh();$result['plan_id']=(new PlanService($pdo))->generate(48);echo json_encode($result, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR) . PHP_EOL; break;
+        case 'optimizer:run':
+            $service=new PlanService(Connection::get());$id=$service->generate((int)($argv[2]??48));echo json_encode(['plan_id'=>$id,'plan'=>$service->latest()],JSON_PRETTY_PRINT|JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR).PHP_EOL;break;
+        case 'worker:mqtt': case 'profile:import': case 'telemetry:aggregate': case 'retention:run': case 'backup:create': case 'user:create-admin':
             throw new RuntimeException('Kommandoen kræver installeret database eller konkret konfiguration. Se --help og dokumentationen.');
         default: throw new RuntimeException('Ukendt kommando: ' . $command);
     }

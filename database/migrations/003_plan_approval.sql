@@ -1,0 +1,1 @@
+CREATE TABLE IF NOT EXISTS plan_approvals (plan_id BIGINT UNSIGNED PRIMARY KEY, approved_at DATETIME(6) NOT NULL, approved_by VARCHAR(100) NOT NULL, approval_token_hash CHAR(64) NOT NULL, status ENUM('approved_shadow','cancelled') NOT NULL DEFAULT 'approved_shadow', FOREIGN KEY(plan_id) REFERENCES plans(id) ON DELETE CASCADE);

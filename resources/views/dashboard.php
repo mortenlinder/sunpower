@@ -10,7 +10,7 @@ $gridText = $state['grid_power_w'] > 50 ? 'Der hentes energi fra nettet' : ($sta
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#06110e"><title>Solportalen</title>
-  <link rel="manifest" href="/manifest.webmanifest"><link rel="stylesheet" href="/assets/css/app.css"><link rel="stylesheet" href="/assets/css/insights.css"><link rel="stylesheet" href="/assets/css/learning.css">
+  <link rel="manifest" href="/manifest.webmanifest"><link rel="stylesheet" href="/assets/css/app.css"><link rel="stylesheet" href="/assets/css/insights.css"><link rel="stylesheet" href="/assets/css/learning.css"><link rel="stylesheet" href="/assets/css/plan.css">
   <script src="/assets/js/app.js" defer></script>
 </head>
 <body class="<?= $wallboard ? 'wallboard' : '' ?>" data-mode="<?= htmlspecialchars($mode, ENT_QUOTES) ?>">
@@ -54,6 +54,14 @@ $gridText = $state['grid_power_w'] > 50 ? 'Der hentes energi fra nettet' : ($sta
     <article class="forecast-card"><div class="section-title"><div><p class="eyebrow">VEJRET I VÆRLØSE</p><h2>Solbarometer</h2></div><span class="source-badge">YR · 48 TIMER</span></div><div class="solar-overview"><div class="solar-dial" id="solar-dial" style="--score:0"><strong id="solar-score">—</strong><small>ud af 100</small></div><div><h3 id="solar-label">Henter prognose…</h3><p id="solar-copy">Solportalen vurderer skydække, dagslys og forventet produktion.</p></div></div><div class="weather-strip" id="weather-strip"><span class="skeleton"></span><span class="skeleton"></span><span class="skeleton"></span><span class="skeleton"></span></div></article>
     <article class="price-card"><div class="section-title"><div><p class="eyebrow">DK2 · SAMLET PRIS</p><h2>I dag og i morgen</h2></div><span class="source-badge">15 MIN.</span></div><div class="price-summary"><div><small>Lige nu</small><b id="price-now">—</b></div><div><small>Billigste interval</small><b id="price-low">—</b></div><div><small>Dyreste interval</small><b id="price-high">—</b></div></div><canvas id="price-chart" height="160" aria-label="Samlet elpris med referenceværdier"></canvas><div class="price-legend"><span>Spot + nettarif + afgifter + moms</span><b>Kr./kWh</b></div></article>
     <article class="plan-card"><div class="plan-head"><span class="brain">✦</span><div><p class="eyebrow">INTELLIGENT PLAN</p><h2>Shadow mode</h2></div><span class="readonly-badge">INGEN WRITES</span></div><p class="plan-lead" id="plan-action">Afventer pris- og vejrdata.</p><div class="timeline" id="plan-timeline"></div><div class="consumption-watch"><span>⌁</span><div><b>Forbrugsvagten lærer</b><small id="consumption-status">Ingen elbilhændelser genkendt endnu</small></div></div><div class="plan-note"><span>✓</span><p><b>Sikker rådgivning</b><small>Planen beregnes, men inverteren styres ikke.</small></p></div></article>
+  </section>
+
+  <section class="full-plan" id="plan">
+    <div class="plan-toolbar"><div><p class="eyebrow">24–48 TIMERS BATTERIPLAN</p><h2>Planlagt efter pris, sol og dit forbrug</h2><p id="plan-explanation">Planen dannes, når der er tilstrækkelige prognosedata.</p></div><div class="plan-kpis"><div><small>Forventet besparelse</small><b id="plan-saving">—</b></div><div><small>Horisont</small><b id="plan-horizon">—</b></div><div><small>Aktive intervaller</small><b id="plan-active-count">—</b></div></div></div>
+    <div class="plan-chart-wrap"><canvas id="plan-chart" height="230" aria-label="Batteriplan med pris og SOC"></canvas></div>
+    <div class="plan-actions-legend"><span class="charge">Oplad</span><span class="solar-charge">Gem sol</span><span class="hold">Hold</span><span class="discharge">Aflad</span><span class="soc">SOC</span></div>
+    <div class="plan-table-wrap"><table><thead><tr><th>Tid</th><th>Handling</th><th>Effekt</th><th>SOC</th><th>Pris</th><th>Begrundelse</th></tr></thead><tbody id="plan-rows"><tr><td colspan="6">Afventer første komplette plan…</td></tr></tbody></table></div>
+    <div class="approval-panel"><div><span class="approval-icon">✓</span><div><b id="approval-title">Gennemse planen</b><small id="approval-copy">Godkendelsen gemmes i auditloggen og starter ingen styring.</small></div></div><button id="approve-plan" type="button" disabled>Godkend 24–48 timers plan</button></div>
   </section>
 
   <section class="lower-grid" id="historik">
