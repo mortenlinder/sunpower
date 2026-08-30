@@ -10,7 +10,7 @@ SOURCE_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 APP_DIR=/opt/solportalen
 DB_NAME=solportalen
 DB_USER=solportal
-DB_PASSWORD=$(od -An -N24 -tx1 /dev/urandom | tr -d ' \n')
+DB_PASSWORD=
 
 apt-get update
 DEBIAN_FRONTEND=noninteractive apt-get install -y \
@@ -43,6 +43,25 @@ usermod -a -G solportal-app www-data
 mkdir -p "$APP_DIR"
 rsync -a --delete --exclude='.git/' --exclude='.env' "$SOURCE_DIR/" "$APP_DIR/"
 mkdir -p "$APP_DIR/var"
+
+# .env bevares ved opgraderinger. Genbrug derfor den eksisterende
+# databaseadgangskode, før MariaDB-brugeren opdateres. Tidligere genererede
+# installeren en ny adgangskode ved hver kørsel, men lod den gamle stå i .env.
+if [ -f "$APP_DIR/.env" ]; then
+    DB_PASSWORD=$(sed -n 's/^DB_PASSWORD=//p' "$APP_DIR/.env" | head -n 1)
+fi
+if [ -z "$DB_PASSWORD" ]; then
+    DB_PASSWORD=$(od -An -N24 -tx1 /dev/urandom | tr -d ' \n')
+fi
+
+# Installeren har hidtil kun genereret hex-adgangskoder. Afvis andre værdier
+# her, så indhold fra .env aldrig interpoleres usikkert i SQL-blokken.
+case "$DB_PASSWORD" in
+    *[!0-9A-Fa-f]*)
+        echo "DB_PASSWORD i $APP_DIR/.env skal være en hex-værdi uden citationstegn." >&2
+        exit 1
+        ;;
+esac
 
 mariadb --protocol=socket <<SQL
 CREATE DATABASE IF NOT EXISTS ${DB_NAME} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -122,8 +141,10 @@ chmod 0640 "$APP_DIR/.env"
 chmod 0755 "$APP_DIR/bin/solportal"
 
 install -m 0644 "$APP_DIR/apache/solportalen.conf" /etc/apache2/sites-available/solportalen.conf
+printf '%s\n' 'ServerName localhost' > /etc/apache2/conf-available/solportalen-servername.conf
 a2dissite 000-default >/dev/null 2>&1 || true
 a2ensite solportalen
+a2enconf solportalen-servername >/dev/null
 a2enmod headers
 apache2ctl configtest
 
