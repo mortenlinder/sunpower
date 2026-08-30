@@ -1,0 +1,1 @@
+ALTER TABLE operational_state MODIFY COLUMN state_value MEDIUMTEXT NOT NULL;
