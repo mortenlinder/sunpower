@@ -47,10 +47,33 @@ function draw() {
 }
 
 function describe(state) {
-    document.querySelector('#battery-state').textContent = state.battery_power_w > 50 ? 'Batteriet aflader til huset' : state.battery_power_w < -50 ? 'Batteriet oplades' : 'Batteriet er i hvile';
-    document.querySelector('#grid-state').textContent = state.grid_power_w > 50 ? 'Der importeres fra elnettet' : state.grid_power_w < -50 ? 'Der eksporteres til elnettet' : 'Næsten intet netflow';
-    document.querySelector('#grid-direction').textContent = state.grid_power_w >= 0 ? 'Import' : 'Eksport';
-    document.querySelector('#soc').textContent = `${Number(state.battery_soc_pct || 0).toLocaleString('da-DK', {maximumFractionDigits: 0})} % SOC`;
+    const batteryText = state.battery_power_w > 50 ? 'Batteriet hjælper huset' : state.battery_power_w < -50 ? 'Overskuddet lagres' : 'Batteriet er i hvile';
+    const gridText = state.grid_power_w > 50 ? 'Der hentes energi fra nettet' : state.grid_power_w < -50 ? 'Overskud sendes til nettet' : 'Næsten intet netflow';
+    const soc = Number(state.battery_soc_pct || 0);
+    document.querySelector('#battery-state').textContent = batteryText;
+    document.querySelector('#insight-title').textContent = batteryText;
+    document.querySelector('#grid-state').textContent = gridText;
+    document.querySelector('#grid-direction').textContent = state.grid_power_w >= 0 ? 'Importerer' : 'Eksporterer';
+    document.querySelector('#soc-big').textContent = `${soc.toLocaleString('da-DK', {maximumFractionDigits: 0})} %`;
+    document.querySelector('#flow-soc').textContent = `${soc.toLocaleString('da-DK', {maximumFractionDigits: 0})} %`;
+    document.querySelector('.soc-bar').style.setProperty('--soc', `${soc}%`);
+    document.querySelector('#battery-fill').style.setProperty('--soc', `${soc}%`);
+    document.querySelector('#flow-grid-label').textContent = state.grid_power_w >= 0 ? 'import' : 'eksport';
+}
+
+function animateFlows(state) {
+    const flows = [
+        ['#flow-solar', state.pv_power_w, false],
+        ['#flow-home', state.load_power_w, false],
+        ['#flow-battery', state.battery_power_w, state.battery_power_w > 0],
+        ['#flow-grid', state.grid_power_w, state.grid_power_w > 0],
+    ];
+    flows.forEach(([selector, value, reverse]) => {
+        const line = document.querySelector(selector);
+        line.classList.toggle('idle', Math.abs(Number(value) || 0) < 35);
+        line.classList.toggle('reverse', reverse);
+        line.style.animationDuration = `${Math.max(.55, 2.1 - Math.min(Math.abs(Number(value) || 0), 6000) / 4000)}s`;
+    });
 }
 
 async function refresh() {
@@ -60,9 +83,15 @@ async function refresh() {
         const state = payload.data || {};
         document.querySelector('#pv').textContent = fmt(state.pv_power_w);
         document.querySelector('#load').textContent = fmt(state.load_power_w);
-        document.querySelector('#battery').textContent = fmt(state.battery_power_w);
+        document.querySelector('#battery-flow-label').textContent = fmt(state.battery_power_w);
         document.querySelector('#grid').textContent = fmt(state.grid_power_w);
+        document.querySelector('#flow-pv').textContent = fmt(state.pv_power_w);
+        document.querySelector('#flow-load').textContent = fmt(state.load_power_w);
+        document.querySelector('#flow-battery-value').textContent = fmt(state.battery_power_w);
+        document.querySelector('#flow-grid-value').textContent = fmt(state.grid_power_w);
+        document.querySelector('#updated-time').textContent = new Date().toLocaleTimeString('da-DK', {hour: '2-digit', minute: '2-digit', second: '2-digit'});
         describe(state);
+        animateFlows(state);
         const fresh = payload.data_age_seconds !== null && payload.data_age_seconds < 30;
         document.body.dataset.offline = fresh ? 'false' : 'true';
         document.querySelector('#connection-status').textContent = fresh ? 'Forbundet' : `Data er ${payload.data_age_seconds ?? '?'} sek. gamle`;

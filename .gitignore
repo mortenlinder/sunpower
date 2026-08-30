@@ -3,6 +3,7 @@
 /var/
 /.idea/
 /.vscode/
+/.build_tools/
 *.log
 *.swp
 .DS_Store

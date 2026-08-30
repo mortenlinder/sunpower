@@ -2,18 +2,58 @@
 declare(strict_types=1);
 /** @var array $state */
 $kw = static fn (float|int $w): string => number_format(abs((float) $w) / 1000, 2, ',', '.') . ' kW';
-$batteryText = $state['battery_power_w'] > 50 ? 'Batteriet aflader til huset' : ($state['battery_power_w'] < -50 ? 'Batteriet oplades' : 'Batteriet er i hvile');
-$gridText = $state['grid_power_w'] > 50 ? 'Der importeres fra elnettet' : ($state['grid_power_w'] < -50 ? 'Der eksporteres til elnettet' : 'Næsten intet netflow');
+$batteryText = $state['battery_power_w'] > 50 ? 'Batteriet hjælper huset' : ($state['battery_power_w'] < -50 ? 'Overskuddet lagres' : 'Batteriet er i hvile');
+$gridText = $state['grid_power_w'] > 50 ? 'Der hentes energi fra nettet' : ($state['grid_power_w'] < -50 ? 'Overskud sendes til nettet' : 'Næsten intet netflow');
 ?>
-<!doctype html><html lang="da" data-theme="dark"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#071713"><title>Solportalen</title><link rel="manifest" href="/manifest.webmanifest"><link rel="stylesheet" href="/assets/css/app.css"><script src="/assets/js/app.js" defer></script></head>
+<!doctype html>
+<html lang="da" data-theme="dark">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#06110e"><title>Solportalen</title>
+  <link rel="manifest" href="/manifest.webmanifest"><link rel="stylesheet" href="/assets/css/app.css">
+  <script src="/assets/js/app.js" defer></script>
+</head>
 <body class="<?= $wallboard ? 'wallboard' : '' ?>" data-mode="<?= htmlspecialchars($mode, ENT_QUOTES) ?>">
-<header><div class="brand"><span class="sunmark">☀</span><div><strong>Solportalen</strong><small>Lokal energi. Fuld kontrol.</small></div></div><div class="status"><span class="pill simulated"><?= $mode === 'simulator' ? 'SIMULATOR' : 'GROWATT RS485' ?></span><span class="pill shadow">READ ONLY</span><span class="live-dot"></span><span id="clock"></span></div></header>
+<header>
+  <div class="brand"><span class="sunmark"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M2 12h2m16 0h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></span><div><strong>Solportalen</strong><small>Lokal energi · live fra dit anlæg</small></div></div>
+  <div class="status"><span class="pill source-pill"><?= $mode === 'simulator' ? 'SIMULATOR' : 'GROWATT · RS485' ?></span><span class="pill read-pill">READ ONLY</span><span class="live-dot"></span><span id="clock"></span></div>
+</header>
 <div class="layout">
-<?php if (!$wallboard): ?><nav><a class="active" href="/">Overblik</a><a href="#priser">Priser &amp; tariffer</a><a href="#plan">Plan</a><a href="#historik">Historik</a><a href="#batteri">Batteri</a><a href="#enheder">Enheder</a><a href="#styring">Manuel styring</a><a href="#commissioning">Commissioning</a><a href="#diagnostik">RS485-diagnostik</a><a href="#alarmer">Alarmer</a><a href="/wallboard">Wallboard</a></nav><?php endif; ?>
+<?php if (!$wallboard): ?><nav><div class="nav-label">SOLPORTALEN</div><a class="active" href="/"><span>◉</span>Overblik</a><a href="#flow"><span>⌁</span>Energiflow</a><a href="#historik"><span>⌁</span>Historik</a><div class="nav-label">ANLÆG</div><a href="#batteri"><span>▣</span>Batteri</a><a href="#enheder"><span>◇</span>Enheder</a><a href="#diagnostik"><span>⌘</span>RS485-diagnostik</a><a href="/wallboard"><span>□</span>Wallboard</a><div class="nav-safety"><i></i><div><b>Sikker tilstand</b><small>Styring er låst</small></div></div></nav><?php endif; ?>
 <main>
-<section class="hero"><div><p class="eyebrow">SYSTEMET LIGE NU</p><h1 id="headline"><?= $online ? 'Live forbindelse til Growatt' : 'Venter på friske inverterdata' ?></h1><p id="summary"><?= $online ? 'Read-only Modbus-data opdateres lokalt gennem RS485.' : 'Kontrollér device-worker og serieport, hvis tilstanden fortsætter.' ?></p></div><div class="safe"><span><?= $online ? '✓' : '!' ?></span><div><b id="connection-status"><?= $online ? 'Forbundet' : 'Data mangler' ?></b><small>Modbus-writes er deaktiveret</small></div></div></section>
-<section class="metrics"><article><span>Solproduktion</span><b id="pv"><?= $kw($state['pv_power_w']) ?></b><small>Målt via RS485</small></article><article><span>Husets forbrug</span><b id="load"><?= $kw($state['load_power_w']) ?></b><small>Growatt registermapping</small></article><article><span>Batteri</span><b id="battery"><?= $kw($state['battery_power_w']) ?></b><small><i style="--soc:<?= (float)$state['battery_soc_pct'] ?>%"></i><span id="soc"><?= number_format((float)$state['battery_soc_pct'], 0) ?> % SOC</span></small></article><article><span>El-net</span><b id="grid"><?= $kw($state['grid_power_w']) ?></b><small id="grid-direction"><?= $state['grid_power_w'] >= 0 ? 'Import' : 'Eksport' ?></small></article><article class="price"><span>Samlet købspris</span><b>— <em>DKK/kWh</em></b><small>Prisprovider ikke aktiveret</small></article></section>
-<section class="grid"><article class="flow"><div class="section-title"><div><p class="eyebrow">ENERGIFLOW</p><h2>Strømmen finder den bedste vej</h2></div><span>Opdateret nu</span></div><div class="flowmap"><div class="node solar">☀<b>Sol</b><strong id="flow-pv"><?= $kw($state['pv_power_w']) ?></strong></div><div class="line horizontal"></div><div class="node home">⌂<b>Hus</b><strong><?= $kw($state['load_power_w']) ?></strong></div><div class="line down"></div><div class="flow-bottom"><div class="node battery">◫<b>Batteri</b><strong><?= number_format((float)$state['battery_soc_pct'], 0) ?> %</strong></div><div class="node gridnode">⇅<b>Net</b><strong><?= $kw($state['grid_power_w']) ?></strong></div></div></div></article>
-<aside><article class="answer now"><p class="eyebrow">HVAD SKER DER NU?</p><h3 id="battery-state"><?= $batteryText ?></h3><p id="grid-state"><?= $gridText ?></p></article><article class="answer why"><p class="eyebrow">HVORFOR VISER VI DET?</p><h3>Direkte, lokal måling</h3><p>Værdierne læses read-only fra inverteren. Solportalen styrer endnu ikke anlægget.</p></article><article class="answer next"><p class="eyebrow">NÆSTE HANDLING</p><h3>Kun overvågning</h3><p>Automatik og Modbus-writes forbliver deaktiveret under commissioning.</p></article></aside></section>
-<section class="plan" id="plan"><div class="section-title"><div><p class="eyebrow">LIVE</p><h2>Effekt de seneste minutter</h2></div><b id="sample-count">0 målepunkter</b></div><canvas id="chart" height="170" aria-label="Live effektgraf"></canvas></section>
-</main></div><footer><span id="footer-source"><?= $mode === 'simulator' ? 'Data er simulerede' : 'Live read-only RS485-data' ?></span> · Signalmapping er under commissioning · <a href="/healthz">Systemstatus</a></footer></body></html>
+  <section class="hero"><div><p class="eyebrow">DIT ENERGIOVERBLIK</p><h1><span>God eftermiddag.</span> Dit anlæg arbejder for dig.</h1><p id="summary"><?= $online ? 'Live-data fra inverteren – helt lokalt i dit hjem.' : 'Venter på friske data fra inverteren.' ?></p></div><div class="safe"><span><?= $online ? '✓' : '!' ?></span><div><b id="connection-status"><?= $online ? 'Live forbindelse' : 'Data mangler' ?></b><small>Opdaterer hvert 5. sekund</small></div></div></section>
+
+  <section class="metrics">
+    <article class="metric solar-card"><div class="metric-icon">☀</div><div><span>Producerer nu</span><b id="pv"><?= $kw($state['pv_power_w']) ?></b><small><i></i>Solpaneler aktive</small></div></article>
+    <article class="metric home-card"><div class="metric-icon">⌂</div><div><span>Huset bruger</span><b id="load"><?= $kw($state['load_power_w']) ?></b><small>Direkte forbrug lige nu</small></div></article>
+    <article class="metric battery-card"><div class="metric-icon">▣</div><div><span>Batteriniveau</span><b id="soc-big"><?= number_format((float)$state['battery_soc_pct'], 0) ?> %</b><small><i class="soc-bar" style="--soc:<?= (float)$state['battery_soc_pct'] ?>%"></i><span id="battery-flow-label"><?= $kw($state['battery_power_w']) ?></span></small></div></article>
+    <article class="metric grid-card"><div class="metric-icon">⇅</div><div><span>Elnet</span><b id="grid"><?= $kw($state['grid_power_w']) ?></b><small id="grid-direction"><?= $state['grid_power_w'] >= 0 ? 'Importerer' : 'Eksporterer' ?></small></div></article>
+  </section>
+
+  <section class="energy-card" id="flow">
+    <div class="section-title"><div><p class="eyebrow">LIVE ENERGIFLOW</p><h2>Se energien bevæge sig</h2></div><div class="updated"><span></span>Opdateret <b id="updated-time">nu</b></div></div>
+    <div class="energy-stage">
+      <div class="stage-glow"></div>
+      <svg class="energy-lines" viewBox="0 0 1000 570" preserveAspectRatio="none" aria-hidden="true">
+        <defs><filter id="glow"><feGaussianBlur stdDeviation="4" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
+        <path class="track" d="M185 148 C310 148 330 260 450 280"/><path id="flow-solar" class="beam sunbeam" d="M185 148 C310 148 330 260 450 280"/>
+        <path class="track" d="M550 280 C680 260 690 148 815 148"/><path id="flow-home" class="beam greenbeam" d="M550 280 C680 260 690 148 815 148"/>
+        <path class="track" d="M455 330 C350 365 320 445 205 450"/><path id="flow-battery" class="beam limebeam" d="M455 330 C350 365 320 445 205 450"/>
+        <path class="track" d="M545 330 C650 365 680 445 795 450"/><path id="flow-grid" class="beam bluebeam" d="M545 330 C650 365 680 445 795 450"/>
+      </svg>
+      <div class="energy-node node-solar"><div class="node-icon">☀</div><span>Solpaneler</span><b id="flow-pv"><?= $kw($state['pv_power_w']) ?></b><small>produktion</small></div>
+      <div class="energy-node node-home"><div class="node-icon">⌂</div><span>Dit hjem</span><b id="flow-load"><?= $kw($state['load_power_w']) ?></b><small>forbrug</small></div>
+      <div class="energy-node node-battery"><div class="node-icon battery-gauge"><i id="battery-fill" style="--soc:<?= (float)$state['battery_soc_pct'] ?>%"></i>▣</div><span>Batteri</span><b id="flow-soc"><?= number_format((float)$state['battery_soc_pct'], 0) ?> %</b><small id="flow-battery-value"><?= $kw($state['battery_power_w']) ?></small></div>
+      <div class="energy-node node-grid"><div class="node-icon">⇅</div><span>Offentligt net</span><b id="flow-grid-value"><?= $kw($state['grid_power_w']) ?></b><small id="flow-grid-label"><?= $state['grid_power_w'] >= 0 ? 'import' : 'eksport' ?></small></div>
+      <div class="inverter"><div class="inverter-halo"></div><img src="/assets/images/growatt-inverter.png" alt="Growatt hybridinverter" style="clip-path:polygon(6% 8%,94.5% 10%,94.5% 86%,92% 90%,13% 91%,6% 87%)"><div class="inverter-chip"><i></i><span><b>Growatt SPH</b><small id="inverter-state">Online · VPP mode</small></span></div></div>
+    </div>
+    <div class="flow-caption"><span class="pulse-ring"></span><div><b id="battery-state"><?= $batteryText ?></b><small id="grid-state"><?= $gridText ?></small></div><em>Live analyse</em></div>
+  </section>
+
+  <section class="lower-grid" id="historik">
+    <article class="chart-card"><div class="section-title"><div><p class="eyebrow">SENESTE MINUTTER</p><h2>Anlæggets puls</h2></div><b id="sample-count">0 målepunkter</b></div><div class="legend"><span class="pv">Sol</span><span class="load">Hus</span><span class="battery">Batteri</span><span class="gridline">Net</span></div><canvas id="chart" height="190" aria-label="Live effektgraf"></canvas></article>
+    <aside><article class="insight"><div class="insight-top"><span>LIVE INDSIGT</span><i>✦</i></div><h3 id="insight-title"><?= $batteryText ?></h3><p>Solportalen følger energiens vej lokalt – uden cloud og uden at styre inverteren.</p><div class="readonly"><span>✓</span><div><b>Read-only beskyttelse</b><small>Modbus-writes er deaktiveret</small></div></div></article></aside>
+  </section>
+</main></div>
+<footer><span id="footer-source"><?= $mode === 'simulator' ? 'Data er simulerede' : 'Live read-only RS485-data' ?></span> · Data forlader ikke dit lokale netværk · <a href="/healthz">Systemstatus</a></footer>
+</body></html>
