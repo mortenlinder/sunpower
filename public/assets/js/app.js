@@ -16,7 +16,7 @@ function draw() {
     if (!canvas) return;
     const ratio = devicePixelRatio || 1;
     const width = canvas.clientWidth;
-    const height = 170;
+    const height = 190;
     if (canvas.width !== Math.round(width * ratio)) {
         canvas.width = Math.round(width * ratio);
         canvas.height = Math.round(height * ratio);
@@ -24,26 +24,75 @@ function draw() {
     const context = canvas.getContext('2d');
     context.setTransform(ratio, 0, 0, ratio, 0, 0);
     context.clearRect(0, 0, width, height);
+    const left = 46, right = 10, top = 10, bottom = 24;
+    const plotWidth = width - left - right, plotHeight = height - top - bottom;
+    context.font = '10px system-ui';
+    context.fillStyle = '#789287';
     context.strokeStyle = '#234238';
     context.lineWidth = 1;
     for (let row = 0; row < 4; row++) {
         context.beginPath();
-        context.moveTo(0, 10 + row * 48);
-        context.lineTo(width, 10 + row * 48);
+        const y = top + row * plotHeight / 3;
+        context.moveTo(left, y);
+        context.lineTo(width - right, y);
         context.stroke();
     }
     const maximum = Math.max(1000, ...samples.flatMap(sample => [sample.pv, sample.load, Math.abs(sample.battery), Math.abs(sample.grid)]));
+    for (let row = 0; row < 4; row++) {
+        const value = maximum * (1 - row / 3) / 1000;
+        context.fillText(`${value.toLocaleString('da-DK', {maximumFractionDigits: 1})} kW`, 0, top + row * plotHeight / 3 + 3);
+    }
+    const spanMinutes = Math.max(1, Math.round((samples.length - 1) * 5 / 60));
+    [`−${spanMinutes} min`, `−${Math.round(spanMinutes*2/3)} min`, `−${Math.round(spanMinutes/3)} min`, 'nu'].forEach((label, index) => context.fillText(label, left + index * plotWidth / 3 - (index ? 9 : 0), height - 5));
     for (const [key, color] of [['pv', '#f5c85b'], ['load', '#56e39f'], ['battery', '#b6eb55'], ['grid', '#65a9ff']]) {
         context.strokeStyle = color;
         context.lineWidth = 2;
         context.beginPath();
         samples.forEach((sample, index) => {
-            const x = samples.length < 2 ? 0 : index * width / (samples.length - 1);
-            const y = 160 - (Math.abs(sample[key]) / maximum) * 145;
+            const x = samples.length < 2 ? left : left + index * plotWidth / (samples.length - 1);
+            const y = top + plotHeight - (Math.abs(sample[key]) / maximum) * plotHeight;
             index ? context.lineTo(x, y) : context.moveTo(x, y);
         });
         context.stroke();
     }
+}
+
+function weatherIcon(symbol = '') {
+    if (symbol.includes('rain') || symbol.includes('sleet')) return '☂';
+    if (symbol.includes('cloudy')) return '☁';
+    if (symbol.includes('partly')) return '◒';
+    return '☀';
+}
+
+function drawPrice(prices) {
+    const canvas = document.querySelector('#price-chart');
+    if (!canvas || !prices.length) return;
+    const ratio = devicePixelRatio || 1, width = canvas.clientWidth, height = 160;
+    canvas.width = Math.round(width * ratio); canvas.height = Math.round(height * ratio);
+    const context = canvas.getContext('2d'); context.setTransform(ratio, 0, 0, ratio, 0, 0);
+    const left = 34, right = 8, top = 8, bottom = 22, plotWidth = width - left - right, plotHeight = height - top - bottom;
+    const values = prices.map(price => Number(price.total_dkk_kwh));
+    const min = Math.min(...values), max = Math.max(...values, .5), range = Math.max(.2, max - Math.min(0, min));
+    context.font = '9px system-ui'; context.fillStyle = '#789287'; context.strokeStyle = '#234238';
+    for (let row = 0; row < 3; row++) { const y = top + row * plotHeight / 2; context.beginPath(); context.moveTo(left,y); context.lineTo(width-right,y); context.stroke(); context.fillText(`${(max-row*range/2).toFixed(2)}`,0,y+3); }
+    const gradient = context.createLinearGradient(0,top,0,height-bottom); gradient.addColorStop(0,'rgba(67,224,154,.5)'); gradient.addColorStop(1,'rgba(67,224,154,.02)');
+    context.beginPath(); values.forEach((value,index) => { const x=left+index*plotWidth/Math.max(1,values.length-1); const y=top+(max-value)/range*plotHeight; index?context.lineTo(x,y):context.moveTo(x,y); }); context.lineTo(width-right,height-bottom); context.lineTo(left,height-bottom); context.closePath(); context.fillStyle=gradient; context.fill();
+    context.beginPath(); values.forEach((value,index) => { const x=left+index*plotWidth/Math.max(1,values.length-1); const y=top+(max-value)/range*plotHeight; index?context.lineTo(x,y):context.moveTo(x,y); }); context.strokeStyle='#43e09a'; context.lineWidth=2; context.stroke();
+    context.fillStyle='#789287'; context.fillText('nu',left,height-4); context.fillText('+24 t',left+plotWidth/2-10,height-4); context.fillText('+48 t',width-right-25,height-4);
+}
+
+async function refreshInsights() {
+    try {
+        const response = await fetch('/api/v1/insights', {cache:'no-store'}); if (!response.ok) return;
+        const data = await response.json(), weather = data.weather || [], prices = data.prices || [];
+        const score = Number(data.solar_barometer || 0); document.querySelector('#solar-score').textContent = Math.round(score); document.querySelector('#solar-dial').style.setProperty('--score', score);
+        document.querySelector('#solar-label').textContent = score >= 70 ? 'Stærk soldag på vej' : score >= 40 ? 'En blandet soldag' : 'Begrænset sol i prognosen';
+        document.querySelector('#weather-strip').innerHTML = weather.filter((_,i)=>i%6===0).slice(0,4).map(item => `<div class="weather-hour"><b>${new Date(item.forecast_at+'Z').toLocaleString('da-DK',{weekday:'short',hour:'2-digit'})}</b><i>${weatherIcon(item.symbol_code)}</i><small>${Number(item.temperature_c).toFixed(0)}° · ${Number(item.cloud_pct).toFixed(0)}% sky</small></div>`).join('');
+        if (prices.length) { const now=prices[0], low=prices.reduce((a,b)=>Number(a.total_dkk_kwh)<Number(b.total_dkk_kwh)?a:b), high=prices.reduce((a,b)=>Number(a.total_dkk_kwh)>Number(b.total_dkk_kwh)?a:b); const price=value=>`${Number(value).toLocaleString('da-DK',{minimumFractionDigits:2,maximumFractionDigits:2})} kr.`; document.querySelector('#price-now').textContent=price(now.total_dkk_kwh); document.querySelector('#price-low').textContent=price(low.total_dkk_kwh); document.querySelector('#price-high').textContent=price(high.total_dkk_kwh); drawPrice(prices); }
+        document.querySelector('#plan-action').textContent = data.plan?.action || 'Afventer datagrundlag.';
+        document.querySelector('#plan-timeline').innerHTML = (data.plan?.cheap_intervals || []).slice(0,3).map(slot => `<div class="time-slot"><i></i><div><b>${new Date(slot.interval_start+'Z').toLocaleString('da-DK',{weekday:'short',hour:'2-digit',minute:'2-digit'})}</b><small>Muligt ladevindue · ${Number(slot.total_dkk_kwh).toLocaleString('da-DK',{minimumFractionDigits:2,maximumFractionDigits:2})} kr./kWh</small></div></div>`).join('');
+        const event = (data.consumption_events || [])[0]; if (event) document.querySelector('#consumption-status').textContent = `Senest: ${(Number(event.detected_load_w)/1000).toLocaleString('da-DK',{maximumFractionDigits:1})} kW · ${Number(event.energy_kwh).toLocaleString('da-DK',{maximumFractionDigits:1})} kWh · ${Math.round(Number(event.confidence)*100)}% sikker`;
+    } catch { /* Device dashboard remains usable without external feeds. */ }
 }
 
 function describe(state) {
@@ -109,5 +158,7 @@ clock();
 setInterval(clock, 1000);
 refresh();
 setInterval(refresh, 5000);
+refreshInsights();
+setInterval(refreshInsights, 15 * 60 * 1000);
 addEventListener('resize', draw);
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/service-worker.js');

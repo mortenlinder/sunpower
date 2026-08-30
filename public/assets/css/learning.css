@@ -1,0 +1,1 @@
+.consumption-watch{display:flex;gap:9px;align-items:center;margin-top:14px;padding:10px;border-radius:10px;background:rgba(88,168,255,.06);border:1px solid rgba(88,168,255,.12)}.consumption-watch>span{color:var(--blue)}.consumption-watch b,.consumption-watch small{display:block}.consumption-watch b{font-size:10px}.consumption-watch small{font-size:9px;color:var(--muted)}

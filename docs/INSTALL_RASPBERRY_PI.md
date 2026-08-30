@@ -40,7 +40,9 @@ Scriptet:
 
 ```bash
 sudo systemctl status mariadb apache2 solportal-device --no-pager
+sudo systemctl status solportal-forecast.timer --no-pager
 sudo journalctl -u solportal-device -n 50 --no-pager
+sudo journalctl -u solportal-forecast -n 50 --no-pager
 curl -s http://127.0.0.1/healthz
 hostname -I
 ```

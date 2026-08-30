@@ -7,6 +7,7 @@ use Solportalen\Config\Env;
 use Solportalen\Database\Connection;
 use Solportalen\Device\Simulator\EnergySimulator;
 use Solportalen\Repository\StateRepository;
+use Solportalen\Repository\InsightRepository;
 
 header("Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'");
 header('X-Content-Type-Options: nosniff');
@@ -34,6 +35,12 @@ if ($path === '/healthz' || $path === '/api/v1/health') {
 if ($path === '/api/v1/state') {
     header('Content-Type: application/json; charset=utf-8');
     echo json_encode(['server_timestamp' => gmdate(DATE_ATOM), 'data_timestamp' => $state['source_timestamp'] ?? null, 'data_age_seconds' => $age, 'source' => $mode === 'simulator' ? 'simulator' : 'growatt_rs485', 'data_quality' => $state['data_quality'] ?? 'unavailable', 'system_state' => $online ? 'monitoring' : 'stale', 'data' => $state], JSON_THROW_ON_ERROR);
+    exit;
+}
+if ($path === '/api/v1/insights') {
+    header('Content-Type: application/json; charset=utf-8');
+    try { echo json_encode((new InsightRepository(Connection::get()))->dashboard(), JSON_THROW_ON_ERROR); }
+    catch (Throwable $error) { http_response_code(503); echo json_encode(['error' => 'Prognosedata er ikke klar endnu'], JSON_THROW_ON_ERROR); }
     exit;
 }
 if (str_starts_with($path, '/api/')) {

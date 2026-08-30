@@ -18,3 +18,9 @@ Scriptet installerer Apache, PHP og MariaDB, opretter database og systembruger, 
 Webprocessen viser data og opretter kun højniveaukommandoer. En separat `solportal`-worker ejer serieporten. Profilfiler afgør alle registre og capabilities. Den tomme Growatt-template kan ikke skrive; serienummeret bruges kun som installationsnote. Writes kræver verificeret profil, commissioning-baseline, eksplicit global aktivering og readback.
 
 Fysisk read-only Modbus RTU er verificeret med 9600 8N1, slave-ID 1 og function 04. Signalmappingen er fortsat under commissioning; writes og safe state er ikke verificeret. Se [commissioning](docs/COMMISSIONING.md) og [hardwarestatus](docs/HARDWARE.md).
+
+## Prognoser og intelligent shadow mode
+
+`solportal-forecast.timer` opdaterer hvert kvarter vejrprognosen for Værløse fra Yr og DK2-spotpriser fra Energinets Energi Data Service. Solportalen kombinerer spotpris med konfigurerbare Radius-tariffer, afgift, tillæg og moms og viser billige ladevinduer i shadow mode. Planen er kun rådgivende; `WRITES_ENABLED=false` gælder fortsat.
+
+Device-workeren lærer samtidig et lokalt basisforbrug. Et stabilt belastningsspring over `EV_DETECT_W` registreres som en sandsynlig elbilopladning med energi og confidence, men korte spidser ignoreres. Standardværdier for lokation, solcelleeffekt, tariffer og detektion står i `.env.example` og skal tilpasses den konkrete elaftale og installation.

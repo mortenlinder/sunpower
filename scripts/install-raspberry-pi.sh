@@ -72,6 +72,16 @@ DEVICE_MODE=growatt
 WRITES_ENABLED=false
 AUTOMATION_MODE=shadow
 PRICE_AREA=DK2
+LOCATION_NAME=Værløse
+LOCATION_LAT=55.7833
+LOCATION_LON=12.3833
+PV_PEAK_W=6000
+GRID_TARIFF_LOW_DKK=0.1062
+GRID_TARIFF_HIGH_DKK=0.1593
+GRID_TARIFF_PEAK_DKK=0.4141
+ENERGY_TAX_DKK=0.009
+SUPPLIER_MARKUP_DKK=0
+EV_DETECT_W=4500
 SERIAL_DEVICE=${SERIAL_DEVICE}
 SERIAL_BAUD=9600
 SERIAL_SLAVE_ID=1
@@ -91,12 +101,16 @@ a2enmod headers
 apache2ctl configtest
 
 install -m 0644 "$APP_DIR/systemd/solportal-device.service" /etc/systemd/system/solportal-device.service
+install -m 0644 "$APP_DIR/systemd/solportal-forecast.service" /etc/systemd/system/solportal-forecast.service
+install -m 0644 "$APP_DIR/systemd/solportal-forecast.timer" /etc/systemd/system/solportal-forecast.timer
 systemctl daemon-reload
 
 runuser -u solportal -- php "$APP_DIR/bin/solportal" database:migrate
 runuser -u solportal -- php "$APP_DIR/bin/solportal" worker:device --once
+runuser -u solportal -- php "$APP_DIR/bin/solportal" scheduler:run
 
 systemctl enable --now solportal-device.service
+systemctl enable --now solportal-forecast.timer
 systemctl restart apache2
 
 echo

@@ -1,0 +1,17 @@
+[Unit]
+Description=Solportalen weather, price and planning refresh
+After=network-online.target mariadb.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=solportal
+Group=solportal-app
+WorkingDirectory=/opt/solportalen
+ExecStart=/usr/bin/php /opt/solportalen/bin/solportal scheduler:run
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/solportalen/var
+

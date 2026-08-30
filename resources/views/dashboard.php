@@ -10,7 +10,7 @@ $gridText = $state['grid_power_w'] > 50 ? 'Der hentes energi fra nettet' : ($sta
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#06110e"><title>Solportalen</title>
-  <link rel="manifest" href="/manifest.webmanifest"><link rel="stylesheet" href="/assets/css/app.css">
+  <link rel="manifest" href="/manifest.webmanifest"><link rel="stylesheet" href="/assets/css/app.css"><link rel="stylesheet" href="/assets/css/insights.css"><link rel="stylesheet" href="/assets/css/learning.css">
   <script src="/assets/js/app.js" defer></script>
 </head>
 <body class="<?= $wallboard ? 'wallboard' : '' ?>" data-mode="<?= htmlspecialchars($mode, ENT_QUOTES) ?>">
@@ -45,9 +45,15 @@ $gridText = $state['grid_power_w'] > 50 ? 'Der hentes energi fra nettet' : ($sta
       <div class="energy-node node-home"><div class="node-icon">⌂</div><span>Dit hjem</span><b id="flow-load"><?= $kw($state['load_power_w']) ?></b><small>forbrug</small></div>
       <div class="energy-node node-battery"><div class="node-icon battery-gauge"><i id="battery-fill" style="--soc:<?= (float)$state['battery_soc_pct'] ?>%"></i>▣</div><span>Batteri</span><b id="flow-soc"><?= number_format((float)$state['battery_soc_pct'], 0) ?> %</b><small id="flow-battery-value"><?= $kw($state['battery_power_w']) ?></small></div>
       <div class="energy-node node-grid"><div class="node-icon">⇅</div><span>Offentligt net</span><b id="flow-grid-value"><?= $kw($state['grid_power_w']) ?></b><small id="flow-grid-label"><?= $state['grid_power_w'] >= 0 ? 'import' : 'eksport' ?></small></div>
-      <div class="inverter"><div class="inverter-halo"></div><img src="/assets/images/growatt-inverter.png" alt="Growatt hybridinverter" style="clip-path:polygon(6% 8%,94.5% 10%,94.5% 86%,92% 90%,13% 91%,6% 87%)"><div class="inverter-chip"><i></i><span><b>Growatt SPH</b><small id="inverter-state">Online · VPP mode</small></span></div></div>
+      <div class="inverter studio"><div class="inverter-halo"></div><img src="/assets/images/growatt-inverter-studio.png" alt="Growatt hybridinverter"><div class="inverter-chip"><i></i><span><b>Growatt SPH</b><small id="inverter-state">Online · VPP mode</small></span></div></div>
     </div>
     <div class="flow-caption"><span class="pulse-ring"></span><div><b id="battery-state"><?= $batteryText ?></b><small id="grid-state"><?= $gridText ?></small></div><em>Live analyse</em></div>
+  </section>
+
+  <section class="intelligence" id="intelligent">
+    <article class="forecast-card"><div class="section-title"><div><p class="eyebrow">VEJRET I VÆRLØSE</p><h2>Solbarometer</h2></div><span class="source-badge">YR · 48 TIMER</span></div><div class="solar-overview"><div class="solar-dial" id="solar-dial" style="--score:0"><strong id="solar-score">—</strong><small>ud af 100</small></div><div><h3 id="solar-label">Henter prognose…</h3><p id="solar-copy">Solportalen vurderer skydække, dagslys og forventet produktion.</p></div></div><div class="weather-strip" id="weather-strip"><span class="skeleton"></span><span class="skeleton"></span><span class="skeleton"></span><span class="skeleton"></span></div></article>
+    <article class="price-card"><div class="section-title"><div><p class="eyebrow">DK2 · SAMLET PRIS</p><h2>I dag og i morgen</h2></div><span class="source-badge">15 MIN.</span></div><div class="price-summary"><div><small>Lige nu</small><b id="price-now">—</b></div><div><small>Billigste interval</small><b id="price-low">—</b></div><div><small>Dyreste interval</small><b id="price-high">—</b></div></div><canvas id="price-chart" height="160" aria-label="Samlet elpris med referenceværdier"></canvas><div class="price-legend"><span>Spot + nettarif + afgifter + moms</span><b>Kr./kWh</b></div></article>
+    <article class="plan-card"><div class="plan-head"><span class="brain">✦</span><div><p class="eyebrow">INTELLIGENT PLAN</p><h2>Shadow mode</h2></div><span class="readonly-badge">INGEN WRITES</span></div><p class="plan-lead" id="plan-action">Afventer pris- og vejrdata.</p><div class="timeline" id="plan-timeline"></div><div class="consumption-watch"><span>⌁</span><div><b>Forbrugsvagten lærer</b><small id="consumption-status">Ingen elbilhændelser genkendt endnu</small></div></div><div class="plan-note"><span>✓</span><p><b>Sikker rådgivning</b><small>Planen beregnes, men inverteren styres ikke.</small></p></div></article>
   </section>
 
   <section class="lower-grid" id="historik">
