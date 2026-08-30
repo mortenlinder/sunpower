@@ -50,6 +50,12 @@ if ($path === '/api/v1/suppliers') {
     try { echo json_encode((new ElprisSupplierService(Connection::get()))->comparison(),JSON_THROW_ON_ERROR|JSON_UNESCAPED_UNICODE); }
     catch(Throwable $error){http_response_code(503);echo json_encode(['error'=>'Leverandørdata er ikke klar endnu'],JSON_THROW_ON_ERROR);}exit;
 }
+if ($path === '/api/v1/commissioning/holding') {
+    header('Content-Type: application/json; charset=utf-8');
+    $file=SOLPORTAL_ROOT.'/var/commissioning-growatt-holding.json';
+    if(!is_file($file)){http_response_code(404);echo json_encode(['error'=>'Der er endnu ikke gemt et holding-register-snapshot'],JSON_THROW_ON_ERROR);exit;}
+    readfile($file);exit;
+}
 if ($path === '/api/v1/plans/latest' && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET') {
     header('Content-Type: application/json; charset=utf-8');
     try { echo json_encode((new PlanService(Connection::get()))->latest(), JSON_THROW_ON_ERROR); }
@@ -77,6 +83,11 @@ if ($path === '/suppliers') {
     try { $supplierComparison=(new ElprisSupplierService(Connection::get()))->comparison(); }
     catch(Throwable){$supplierComparison=['current'=>[],'offers'=>[],'last_run'=>null,'export_comparison_included'=>false];}
     require dirname(__DIR__).'/resources/views/suppliers.php';exit;
+}
+if ($path === '/commissioning') {
+    $file=SOLPORTAL_ROOT.'/var/commissioning-growatt-holding.json';$commissioning=[];
+    if(is_file($file)){try{$commissioning=json_decode((string)file_get_contents($file),true,64,JSON_THROW_ON_ERROR);}catch(Throwable){$commissioning=[];}}
+    require dirname(__DIR__).'/resources/views/commissioning.php';exit;
 }
 
 $wallboard = $path === '/wallboard';

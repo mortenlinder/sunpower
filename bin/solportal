@@ -8,6 +8,7 @@ use Solportalen\Database\Connection;
 use Solportalen\Application\DeviceWorker;
 use Solportalen\Config\Env;
 use Solportalen\Device\Growatt\GrowattSphReader;
+use Solportalen\Device\Growatt\GrowattSphCommissioning;
 use Solportalen\Device\Profile\ProfileValidator;
 use Solportalen\Device\Serial\LinuxSerialTransport;
 use Solportalen\Device\Simulator\EnergySimulator;
@@ -18,7 +19,7 @@ use Solportalen\Energy\Planning\PlanService;
 
 $command = $argv[1] ?? 'help';
 if (in_array('--help', $argv, true) || $command === 'help') {
-    echo "Solportalen CLI\n\napp:key database:migrate database:status user:create-admin demo:seed worker:device worker:mqtt scheduler:run supplier:refresh serial:list serial:test modbus:read modbus:dump profile:list profile:validate profile:import optimizer:run telemetry:aggregate retention:run backup:create health simulator:start test\n";
+    echo "Solportalen CLI\n\napp:key database:migrate database:status user:create-admin demo:seed worker:device worker:mqtt scheduler:run supplier:refresh serial:list serial:test modbus:read modbus:dump modbus:holding profile:list profile:validate profile:import optimizer:run telemetry:aggregate retention:run backup:create health simulator:start test\n";
     exit(0);
 }
 try {
@@ -54,6 +55,15 @@ try {
         case 'modbus:dump':
             $transport = new LinuxSerialTransport(Env::get('SERIAL_DEVICE','/dev/ttyUSB0'), (int) Env::get('SERIAL_BAUD','9600'));
             echo json_encode((new GrowattSphReader($transport, (int) Env::get('SERIAL_SLAVE_ID','1')))->rawSnapshot(), JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR) . PHP_EOL; break;
+        case 'modbus:holding':
+            $transport = new LinuxSerialTransport(Env::get('SERIAL_DEVICE','/dev/ttyUSB0'), (int) Env::get('SERIAL_BAUD','9600'));
+            $snapshot=(new GrowattSphCommissioning($transport,(int)Env::get('SERIAL_SLAVE_ID','1')))->inspect();
+            $json=json_encode($snapshot,JSON_PRETTY_PRINT|JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR).PHP_EOL;
+            if(in_array('--save',$argv,true)){
+                $target=SOLPORTAL_ROOT.'/var/commissioning-growatt-holding.json';$temporary=$target.'.tmp';
+                if(file_put_contents($temporary,$json,LOCK_EX)===false||!rename($temporary,$target))throw new RuntimeException('Commissioning-snapshot kunne ikke gemmes.');
+            }
+            echo $json;break;
         case 'scheduler:run':
             $pdo=Connection::get();$plans=new PlanService($pdo);$result=['expired_plans'=>$plans->expireApprovedPlans()];$result+=(new ExternalDataService($pdo))->refresh();try{$result['suppliers']=(new ElprisSupplierService($pdo))->refresh();}catch(Throwable $e){$result['suppliers']='error: '.$e->getMessage();}$result['plan_id']=$plans->generate(48);echo json_encode($result, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR) . PHP_EOL; break;
         case 'supplier:refresh':

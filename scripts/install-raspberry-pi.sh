@@ -154,6 +154,11 @@ install -m 0644 "$APP_DIR/systemd/solportal-forecast.timer" /etc/systemd/system/
 systemctl daemon-reload
 
 runuser -u solportal -- php "$APP_DIR/bin/solportal" database:migrate
+# Function 03 er read-only. Gem et holding-register-snapshot, mens den permanente
+# device-worker stadig er stoppet og serieporten derfor er ledig.
+if ! runuser -u solportal -- php "$APP_DIR/bin/solportal" modbus:holding --save; then
+    echo "ADVARSEL: Holding-register 1070-1108 kunne ikke læses. Writes forbliver låst." >&2
+fi
 # En commissioning-læsning må ikke blokere resten af en softwareopdatering, hvis
 # en anden lokal proces stadig ejer porten. Den permanente worker vil genstarte.
 if ! runuser -u solportal -- php "$APP_DIR/bin/solportal" worker:device --once; then
