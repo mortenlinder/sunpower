@@ -31,6 +31,10 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y \
 
 systemctl enable --now mariadb apache2
 
+# En tidligere installation kan allerede have device-workeren kørende. Stop den
+# før filer udskiftes og før den eksklusive read-only serieportstest køres.
+systemctl stop solportal-device.service 2>/dev/null || true
+
 getent group solportal-app >/dev/null 2>&1 || groupadd --system solportal-app
 id solportal >/dev/null 2>&1 || useradd --system --home "$APP_DIR" --shell /usr/sbin/nologin --gid solportal-app solportal
 usermod -a -G dialout,solportal-app solportal
