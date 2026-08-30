@@ -20,9 +20,9 @@ final class ElprisSupplierService
         $url=rtrim((string)Env::get('ELPRIS_BASE_URL','https://elpris.dk'),'/').'/data/products_'.$area.'.json';
         $body=$this->get($url);$payload=json_decode($body,true,64,JSON_THROW_ON_ERROR);$products=$payload['products']??null;
         if(!is_array($products))throw new RuntimeException('Elpris-produktfilen har ukendt format.');
-        $annual=max(1,(int)Env::get('ANNUAL_ELECTRICITY_CONSUMPTION_KWH','23612'));
+        $annual=max(1,(int)Env::get('ANNUAL_ELECTRICITY_CONSUMPTION_KWH','12000'));
         $spot=max(0.0,(float)Env::get('SUPPLIER_COMPARISON_SPOT_DKK_KWH_EX_VAT','.70'));
-        $baselineRate=max(0.0,(float)Env::get('CURRENT_SUPPLIER_ENERGY_DKK_KWH_EX_VAT','.7618'));
+        $baselineRate=max(0.0,(float)Env::get('CURRENT_SUPPLIER_ENERGY_DKK_KWH_EX_VAT','.70'));
         $baselineSubscription=max(0.0,(float)Env::get('CURRENT_SUPPLIER_SUBSCRIPTION_DKK_MONTH_EX_VAT','0'));
         $baseline=($annual*$baselineRate+12*$baselineSubscription)*1.25;
         $rows=[];
@@ -44,7 +44,7 @@ final class ElprisSupplierService
         $offers=$this->pdo->query('SELECT supplier_name,product_name,billing_type,binding_period,energy_price_dkk_kwh_ex_vat,subscription_dkk_month_ex_vat,annual_supplier_cost_dkk_inc_vat,annual_saving_dkk_inc_vat,maximum_consumption_kwh,valid_from,valid_to,source_updated_at,source_url,caveats_json,fetched_at FROM supplier_offers ORDER BY annual_supplier_cost_dkk_inc_vat ASC LIMIT 40')->fetchAll();
         foreach($offers as&$offer)$offer['caveats']=json_decode((string)$offer['caveats_json'],true)?:[];unset($offer['caveats_json']);unset($offer);
         $run=$this->pdo->query('SELECT fetched_at,status,offer_count,details_json FROM supplier_watch_runs ORDER BY id DESC LIMIT 1')->fetch();
-        return ['current'=>['supplier'=>Env::get('CURRENT_SUPPLIER_NAME','Vindstød'),'annual_kwh'=>(int)Env::get('ANNUAL_ELECTRICITY_CONSUMPTION_KWH','23612'),'energy_rate_dkk_kwh_ex_vat'=>(float)Env::get('CURRENT_SUPPLIER_ENERGY_DKK_KWH_EX_VAT','.7618'),'subscription_dkk_month_ex_vat'=>(float)Env::get('CURRENT_SUPPLIER_SUBSCRIPTION_DKK_MONTH_EX_VAT','0')],'offers'=>$offers,'last_run'=>$run?:null,'export_comparison_included'=>false];
+        return ['current'=>['supplier'=>Env::get('CURRENT_SUPPLIER_NAME','Vindstød'),'annual_kwh'=>(int)Env::get('ANNUAL_ELECTRICITY_CONSUMPTION_KWH','12000'),'energy_rate_dkk_kwh_ex_vat'=>(float)Env::get('CURRENT_SUPPLIER_ENERGY_DKK_KWH_EX_VAT','.70'),'subscription_dkk_month_ex_vat'=>(float)Env::get('CURRENT_SUPPLIER_SUBSCRIPTION_DKK_MONTH_EX_VAT','0')],'offers'=>$offers,'last_run'=>$run?:null,'export_comparison_included'=>false];
     }
 
     private function normalize(array $product,int $annual,float $spot,float $baseline,string $url):?array
