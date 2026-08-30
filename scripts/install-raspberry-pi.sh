@@ -57,6 +57,7 @@ if [ -z "$SERIAL_DEVICE" ]; then
     SERIAL_DEVICE=/dev/ttyUSB0
 fi
 
+if [ ! -f "$APP_DIR/.env" ]; then
 APP_KEY=$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')
 cat > "$APP_DIR/.env" <<ENV
 APP_NAME=Solportalen
@@ -96,6 +97,23 @@ SERIAL_BAUD=9600
 SERIAL_SLAVE_ID=1
 MQTT_ENABLED=false
 ENV
+fi
+
+ensure_env() {
+    key=$1
+    value=$2
+    grep -q "^${key}=" "$APP_DIR/.env" || printf '%s=%s\n' "$key" "$value" >> "$APP_DIR/.env"
+}
+ensure_env ANNUAL_ELECTRICITY_CONSUMPTION_KWH 12000
+ensure_env REDUCED_TAX_THRESHOLD_KWH 4000
+ensure_env ENERGY_TAX_FULL_DKK_KWH 0.008
+ensure_env ENERGY_TAX_REDUCED_DKK_KWH 0.008
+ensure_env ELPRIS_GRID_AREA 791
+ensure_env ELPRIS_BASE_URL https://elpris.dk
+ensure_env CURRENT_SUPPLIER_NAME Vindstød
+ensure_env CURRENT_SUPPLIER_ENERGY_DKK_KWH_EX_VAT 0.70
+ensure_env CURRENT_SUPPLIER_SUBSCRIPTION_DKK_MONTH_EX_VAT 0
+ensure_env SUPPLIER_COMPARISON_SPOT_DKK_KWH_EX_VAT 0.70
 
 chown -R root:solportal-app "$APP_DIR"
 chown solportal:solportal-app "$APP_DIR/var"
