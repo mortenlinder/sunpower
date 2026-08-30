@@ -56,17 +56,16 @@ final class ExternalDataService
     {
         $start = gmdate('Y-m-d', time() - 86400);
         $end = gmdate('Y-m-d', time() + 3 * 86400);
-        $query = http_build_query(['start' => $start, 'end' => $end, 'filter' => json_encode(['PriceArea' => Env::get('PRICE_AREA', 'DK2')]), 'sort' => 'HourUTC ASC', 'limit' => 1000]);
-        $payload = $this->getJson('https://api.energidataservice.dk/dataset/Elspotprices?' . $query, 'Solportalen/0.2');
+        $query = http_build_query(['start' => $start, 'end' => $end, 'filter' => json_encode(['PriceArea' => Env::get('PRICE_AREA', 'DK2')]), 'sort' => 'TimeUTC ASC', 'columns' => 'TimeUTC,PriceArea,DayAheadPriceDKK', 'limit' => 1000]);
+        $payload = $this->getJson('https://api.energidataservice.dk/dataset/DayAheadPrices?' . $query, 'Solportalen/0.3');
         $records = $payload['records'] ?? [];
         $statement = $this->pdo->prepare('INSERT INTO prices(interval_start,interval_end,area,spot_dkk_kwh,source,fetched_at) VALUES (?,?,?,?,"energidataservice",UTC_TIMESTAMP(6)) ON DUPLICATE KEY UPDATE interval_end=VALUES(interval_end),spot_dkk_kwh=VALUES(spot_dkk_kwh),fetched_at=VALUES(fetched_at)');
         $count = 0;
         foreach ($records as $record) {
-            $raw = $record['TimeUTC'] ?? $record['HourUTC'] ?? $record['Minutes5UTC'] ?? null;
-            if ($raw === null || !isset($record['PriceDKK'])) continue;
+            $raw = $record['TimeUTC'] ?? null;
+            if ($raw === null || !isset($record['DayAheadPriceDKK'])) continue;
             $at = new DateTimeImmutable((string) $raw, new DateTimeZone('UTC'));
-            $minutes = isset($record['TimeUTC']) || isset($record['Minutes5UTC']) ? 15 : 60;
-            $statement->execute([$at->format('Y-m-d H:i:s'), $at->modify('+' . $minutes . ' minutes')->format('Y-m-d H:i:s'), (string) ($record['PriceArea'] ?? 'DK2'), (float) $record['PriceDKK'] / 1000]);
+            $statement->execute([$at->format('Y-m-d H:i:s'), $at->modify('+15 minutes')->format('Y-m-d H:i:s'), (string) ($record['PriceArea'] ?? 'DK2'), (float) $record['DayAheadPriceDKK'] / 1000]);
             $count++;
         }
         if ($count === 0) throw new RuntimeException('Prisfeed indeholdt ingen anvendelige records.');

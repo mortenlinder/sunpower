@@ -21,7 +21,7 @@ Fysisk read-only Modbus RTU er verificeret med 9600 8N1, slave-ID 1 og function 
 
 ## Prognoser og intelligent shadow mode
 
-`solportal-forecast.timer` opdaterer hvert kvarter vejrprognosen for Værløse fra Yr og DK2-spotpriser fra Energinets Energi Data Service. Solportalen kombinerer spotpris med konfigurerbare Radius-tariffer, afgift, tillæg og moms og viser billige ladevinduer i shadow mode. Planen er kun rådgivende; `WRITES_ENABLED=false` gælder fortsat.
+`solportal-forecast.timer` opdaterer hvert kvarter vejrprognosen for Værløse fra Yr og 15-minutters DK2-priser fra Energinets aktuelle `DayAheadPrices`-datasæt. Solportalen kombinerer spotpris med konfigurerbare Radius-tariffer, afgift, tillæg og moms og viser billige ladevinduer i shadow mode. Planen er kun rådgivende; `WRITES_ENABLED=false` gælder fortsat.
 
 Device-workeren lærer samtidig et lokalt basisforbrug. Et stabilt belastningsspring over `EV_DETECT_W` registreres som en sandsynlig elbilopladning med energi og confidence, men korte spidser ignoreres. Standardværdier for lokation, solcelleeffekt, tariffer og detektion står i `.env.example` og skal tilpasses den konkrete elaftale og installation.
 
