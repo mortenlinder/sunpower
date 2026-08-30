@@ -5,6 +5,8 @@
 /.vscode/
 /.build_tools/
 /.reference-growatt/
+/.reference-bobbes-growatt/
+/tmp/
 *.log
 *.swp
 .DS_Store

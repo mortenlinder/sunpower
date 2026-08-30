@@ -1,1 +1,47 @@
-{"id":"growatt-sph3600-unverified","schema_version":"1.0","manufacturer":"Growatt","model_family":"SPH3600","verified":false,"installation_note":"Serienummer OMCUCCN05E; må ikke bruges til modeldetektion. Read-only Modbus RTU er fysisk verificeret via VPP-port, RJ45-ben 4/5, 9600 8N1 og slave-ID 1 med function 04 og gyldig CRC. Signalmapping, writes og safe state er ikke verificeret.","observed_transport":{"verified_read_only":true,"mode":"modbus_rtu","port_mode":"VPP","baudrate":9600,"data_bits":8,"parity":"N","stop_bits":1,"slave_id":1,"function_codes_verified":[4]},"missing_information":["exact_model_from_nameplate","firmware","verified_register_map","write_commands","safe_state"],"registers":[],"desired_signals":["pv_power_w","load_power_w","grid_power_w","battery_power_w","battery_soc_pct","device_status","fault_code"],"capabilities":{"read":true,"write":false},"safe_state":null}
+{
+  "id": "growatt-sph3600-unverified",
+  "schema_version": "1.0",
+  "manufacturer": "Growatt",
+  "model_family": "SPH3600",
+  "verified": false,
+  "installation_note": "Read-only Modbus RTU er fysisk verificeret via VPP-port, RJ45-ben 4/5, 9600 8N1 og slave-ID 1 med function 04 og gyldig CRC. Holding-registerlisten nedenfor er kun dokumenteret i Growatt Protocol II v1.20 og er endnu ikke verificeret mod inverterens præcise model og firmware. Serienumre må ikke bruges til modeldetektion eller gemmes i profilen.",
+  "source": {
+    "protocol": "Growatt Inverter Modbus RTU Protocol II v1.20, 2020-04-13",
+    "community_reference": "https://github.com/bobbesnl/ModbusGrowatt_HomeAssistant",
+    "review_note": "Community-README fejlangiver 1090 og 1091 som AC-charge start/stop. Protokollen angiver 1090=Battery First charge power rate og 1091=Battery First stop SOC. README-writeeksempler må derfor ikke anvendes direkte."
+  },
+  "observed_transport": {
+    "verified_read_only": true,
+    "mode": "modbus_rtu",
+    "port_mode": "VPP",
+    "baudrate": 9600,
+    "data_bits": 8,
+    "parity": "N",
+    "stop_bits": 1,
+    "slave_id": 1,
+    "function_codes_verified": [4]
+  },
+  "missing_information": [
+    "exact_model_from_nameplate",
+    "firmware",
+    "holding_register_readback",
+    "controlled_write_test",
+    "verified_safe_state"
+  ],
+  "registers": [
+    {"name":"grid_first_discharge_power_pct","address":1070,"type":"uint16","scale":1,"unit":"pct","range":[0,100],"writable":false,"candidate_write":true,"safety_category":"operational"},
+    {"name":"grid_first_stop_soc_pct","address":1071,"type":"uint16","scale":1,"unit":"pct","range":[0,100],"writable":false,"candidate_write":true,"safety_category":"operational"},
+    {"name":"grid_first_start_1","address":1080,"type":"hhmm_packed","writable":false,"candidate_write":true,"safety_category":"schedule"},
+    {"name":"grid_first_stop_1","address":1081,"type":"hhmm_packed","writable":false,"candidate_write":true,"safety_category":"schedule"},
+    {"name":"grid_first_enable_1","address":1082,"type":"bool","range":[0,1],"writable":false,"candidate_write":true,"safety_category":"mode"},
+    {"name":"battery_first_charge_power_pct","address":1090,"type":"uint16","scale":1,"unit":"pct","range":[0,100],"writable":false,"candidate_write":true,"safety_category":"operational"},
+    {"name":"battery_first_stop_soc_pct","address":1091,"type":"uint16","scale":1,"unit":"pct","range":[0,100],"writable":false,"candidate_write":true,"safety_category":"operational"},
+    {"name":"ac_charge_enable","address":1092,"type":"bool","range":[0,1],"writable":false,"candidate_write":true,"safety_category":"mode"},
+    {"name":"battery_first_start_1","address":1100,"type":"hhmm_packed","writable":false,"candidate_write":true,"safety_category":"schedule"},
+    {"name":"battery_first_stop_1","address":1101,"type":"hhmm_packed","writable":false,"candidate_write":true,"safety_category":"schedule"},
+    {"name":"battery_first_enable_1","address":1102,"type":"bool","range":[0,1],"writable":false,"candidate_write":true,"safety_category":"mode"}
+  ],
+  "desired_signals": ["pv_power_w","load_power_w","grid_power_w","battery_power_w","battery_soc_pct","device_status","fault_code"],
+  "capabilities": {"read":true,"write":false},
+  "safe_state": null
+}
