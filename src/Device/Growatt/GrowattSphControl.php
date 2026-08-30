@@ -74,11 +74,21 @@ final class GrowattSphControl
     private function writeVerified(int $address,int $value):void
     {
         if(!in_array($address,self::MANAGED_REGISTERS,true))throw new RuntimeException("Register $address er ikke på write-whitelisten.");
+        // Undlad unødvendige writes. Flere SPH-firmwares kvitterer for FC06 på
+        // tidsregistre, men publicerer først værdien senere - og ved rollback er
+        // de fleste registre allerede identiske med baseline.
+        $before=$this->readHolding($address,1)[$address];
+        if($before===$value)return;
         $request=RtuCodec::writeSingleRequest($this->slaveId,$address,$value,$this->writesEnabled);
         $echo=RtuCodec::decodeWriteSingleResponse($this->transport->exchange($request),$this->slaveId);
         if($echo!==['address'=>$address,'value'=>$value])throw new RuntimeException("FC06-ekko matchede ikke register $address.");
-        $readback=$this->readHolding($address,1);
-        if($readback[$address]!==$value)throw new RuntimeException("FC03-readback fejlede for register $address.");
+        $actual=null;
+        for($attempt=1;$attempt<=8;$attempt++){
+            usleep(150000);
+            $actual=$this->readHolding($address,1)[$address];
+            if($actual===$value)return;
+        }
+        throw new RuntimeException("FC03-readback fejlede for register $address: forventede $value, læste $actual (før write: $before).");
     }
 
     /** @return array<int,int> */
