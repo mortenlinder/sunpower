@@ -1,0 +1,9 @@
+/.env
+/dist/
+/var/
+/.idea/
+/.vscode/
+*.log
+*.swp
+.DS_Store
+Thumbs.db

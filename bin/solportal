@@ -1,0 +1,55 @@
+#!/usr/bin/env php
+<?php
+declare(strict_types=1);
+
+require dirname(__DIR__) . '/bootstrap.php';
+
+use Solportalen\Database\Connection;
+use Solportalen\Application\DeviceWorker;
+use Solportalen\Config\Env;
+use Solportalen\Device\Growatt\GrowattSphReader;
+use Solportalen\Device\Profile\ProfileValidator;
+use Solportalen\Device\Serial\LinuxSerialTransport;
+use Solportalen\Device\Simulator\EnergySimulator;
+use Solportalen\Repository\StateRepository;
+
+$command = $argv[1] ?? 'help';
+if (in_array('--help', $argv, true) || $command === 'help') {
+    echo "Solportalen CLI\n\napp:key database:migrate database:status user:create-admin demo:seed worker:device worker:mqtt scheduler:run serial:list serial:test modbus:read profile:list profile:validate profile:import optimizer:run telemetry:aggregate retention:run backup:create health simulator:start test\n";
+    exit(0);
+}
+try {
+    switch ($command) {
+        case 'app:key': echo 'APP_KEY=' . bin2hex(random_bytes(32)) . PHP_EOL; break;
+        case 'database:migrate':
+            $pdo = Connection::get();
+            foreach (glob(SOLPORTAL_ROOT . '/database/migrations/*.sql') ?: [] as $file) {
+                foreach (preg_split('/;\s*(?:\r?\n|$)/', (string) file_get_contents($file), -1, PREG_SPLIT_NO_EMPTY) ?: [] as $sql) {
+                    $pdo->exec($sql);
+                }
+            }
+            echo "Databasen er migreret.\n"; break;
+        case 'database:status': Connection::get()->query('SELECT 1'); echo "Database: OK\n"; break;
+        case 'profile:list': foreach (glob(SOLPORTAL_ROOT . '/config/register-profiles/*.json') ?: [] as $file) echo basename($file) . PHP_EOL; break;
+        case 'profile:validate':
+            $file = $argv[2] ?? '';
+            $real = realpath($file);
+            if ($real === false || !str_starts_with($real, realpath(SOLPORTAL_ROOT . '/config/register-profiles') ?: '')) throw new RuntimeException('Profilen skal ligge i config/register-profiles.');
+            $profile = json_decode((string) file_get_contents($real), true, 64, JSON_THROW_ON_ERROR); (new ProfileValidator())->validate($profile); echo "Profil: OK\n"; break;
+        case 'simulator:start': case 'demo:seed': echo json_encode((new EnergySimulator())->state(), JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR) . PHP_EOL; break;
+        case 'health':
+            $state = (new StateRepository(Connection::get()))->current();
+            $age = isset($state['received_timestamp']) ? time() - strtotime($state['received_timestamp']) : null;
+            echo json_encode(['status'=>$age !== null && $age < 30 ? 'ok' : 'stale','mode'=>Env::get('DEVICE_MODE','growatt'),'data_age_seconds'=>$age,'writes_enabled'=>false,'time'=>gmdate(DATE_ATOM)], JSON_PRETTY_PRINT) . PHP_EOL; break;
+        case 'test': require SOLPORTAL_ROOT . '/tests/run.php'; break;
+        case 'serial:list': foreach (glob('/dev/serial/by-id/*') ?: glob('/dev/ttyUSB*') ?: [] as $device) echo $device . PHP_EOL; break;
+        case 'worker:device': (new DeviceWorker())->run(in_array('--once', $argv, true)); break;
+        case 'serial:test': case 'modbus:read':
+            $transport = new LinuxSerialTransport(Env::get('SERIAL_DEVICE','/dev/ttyUSB0'), (int) Env::get('SERIAL_BAUD','9600'));
+            $state = (new GrowattSphReader($transport, (int) Env::get('SERIAL_SLAVE_ID','1')))->readState();
+            echo json_encode($state, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR) . PHP_EOL; break;
+        case 'worker:mqtt': case 'scheduler:run': case 'profile:import': case 'optimizer:run': case 'telemetry:aggregate': case 'retention:run': case 'backup:create': case 'user:create-admin':
+            throw new RuntimeException('Kommandoen kræver installeret database eller konkret konfiguration. Se --help og dokumentationen.');
+        default: throw new RuntimeException('Ukendt kommando: ' . $command);
+    }
+} catch (Throwable $error) { fwrite(STDERR, json_encode(['error'=>$error->getMessage(),'command'=>$command], JSON_UNESCAPED_UNICODE) . PHP_EOL); exit(1); }

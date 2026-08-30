@@ -1,0 +1,18 @@
+[Unit]
+Description=Solportalen device worker
+After=network.target mariadb.service
+[Service]
+Type=simple
+User=solportal
+Group=solportal-app
+SupplementaryGroups=dialout
+WorkingDirectory=/opt/solportalen
+ExecStart=/usr/bin/php /opt/solportalen/bin/solportal worker:device
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+UMask=0027
+[Install]
+WantedBy=multi-user.target

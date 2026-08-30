@@ -1,0 +1,10 @@
+[Unit]
+Description=Solportalen scheduler
+[Service]
+Type=oneshot
+User=solportal
+Group=solportal-app
+WorkingDirectory=/opt/solportalen
+ExecStart=/usr/bin/php /opt/solportalen/bin/solportal scheduler:run
+NoNewPrivileges=true
+ProtectSystem=strict
