@@ -44,9 +44,9 @@ final class PlanService
         $this->expireApprovedPlans();
         $plan=$this->pdo->query('SELECT p.*,a.approved_at,a.expires_at,a.approved_by,a.status approval_status FROM plans p LEFT JOIN plan_approvals a ON a.plan_id=p.id ORDER BY p.id DESC LIMIT 1')->fetch();if(!$plan)return [];
         $statement=$this->pdo->prepare('SELECT starts_at,ends_at,action,power_w,soc_before,soc_after,buy_price,baseline_cost,optimized_cost,explanation,confidence FROM plan_intervals WHERE plan_id=? ORDER BY starts_at');$statement->execute([$plan['id']]);$rows=$statement->fetchAll();
-        $mode=$this->pdo->query("SELECT state_value FROM operational_state WHERE state_key='requested_battery_mode'")->fetchColumn();
+        $mode=$this->pdo->query("SELECT state_value FROM operational_state WHERE state_key='requested_battery_mode'")->fetchColumn();$fallback=$this->fallbackMode();
         $command=$this->pdo->prepare("SELECT id,status,error_message,completed_at FROM commands WHERE command_type='apply_approved_plan' AND JSON_UNQUOTE(JSON_EXTRACT(payload_json,'$.plan_id'))=? ORDER BY id DESC LIMIT 1");$command->execute([(string)$plan['id']]);
-        $plan['intervals']=$rows;$plan['horizon_hours']=$rows===[]?0:round((strtotime(end($rows)['ends_at'])-strtotime($rows[0]['starts_at']))/3600,1);$plan['action_intervals']=count(array_filter($rows,fn($r)=>$r['action']!=='hold'));$plan['csrf_token']=self::csrfToken();$plan['requested_battery_mode']=$mode?:'load_first';$plan['writes_enabled']=Env::bool('WRITES_ENABLED');$plan['apply_command']=$command->fetch()?:null;return $plan;
+        $plan['intervals']=$rows;$plan['horizon_hours']=$rows===[]?0:round((strtotime(end($rows)['ends_at'])-strtotime($rows[0]['starts_at']))/3600,1);$plan['action_intervals']=count(array_filter($rows,fn($r)=>$r['action']!=='hold'));$plan['csrf_token']=self::csrfToken();$plan['requested_battery_mode']=$mode?:$fallback;$plan['fallback_mode']=$fallback;$plan['writes_enabled']=Env::bool('WRITES_ENABLED');$plan['apply_command']=$command->fetch()?:null;return $plan;
     }
 
     public function approve(int $planId,string $token,string $approvedBy): array
@@ -57,15 +57,15 @@ final class PlanService
         $insert=$this->pdo->prepare('INSERT INTO plan_approvals(plan_id,approved_at,expires_at,approved_by,approval_token_hash,status) VALUES(?,UTC_TIMESTAMP(6),?,?,?,"approved_shadow") ON DUPLICATE KEY UPDATE approved_at=VALUES(approved_at),expires_at=VALUES(expires_at),approved_by=VALUES(approved_by),approval_token_hash=VALUES(approval_token_hash),status="approved_shadow"');
         // Store only a one-way digest of the presented anti-CSRF token.
         $insert->execute([$planId,$plan['expires_at'],$approvedBy,hash('sha256',$token)]);
-        $mode=$this->pdo->prepare("INSERT INTO operational_state(state_key,state_value,reason,updated_at) VALUES('requested_battery_mode','approved_plan',?,UTC_TIMESTAMP(6)) ON DUPLICATE KEY UPDATE state_value=VALUES(state_value),reason=VALUES(reason),updated_at=VALUES(updated_at)");$mode->execute(['Manuelt godkendt plan #'.$planId.' er gyldig til '.$plan['expires_at'].' UTC; derefter Load First']);
+        $fallback=$this->fallbackMode();$mode=$this->pdo->prepare("INSERT INTO operational_state(state_key,state_value,reason,updated_at) VALUES('requested_battery_mode','approved_plan',?,UTC_TIMESTAMP(6)) ON DUPLICATE KEY UPDATE state_value=VALUES(state_value),reason=VALUES(reason),updated_at=VALUES(updated_at)");$mode->execute(['Manuelt godkendt plan #'.$planId.' er gyldig til '.$plan['expires_at'].' UTC; derefter '.$fallback]);
         $audit=$this->pdo->prepare('INSERT INTO audit_log(actor,action,object_type,object_id,before_json,after_json,reason,ip_address,correlation_id,created_at) VALUES(?,"approve_shadow_plan","plan",?,NULL,?,"Manuel godkendelse; ingen Modbus-writes",?,UUID(),UTC_TIMESTAMP(6))');$audit->execute([$approvedBy,(string)$planId,json_encode(['status'=>'approved_shadow','input_hash'=>$plan['input_hash']],JSON_THROW_ON_ERROR),$approvedBy]);
-        return ['plan_id'=>$planId,'status'=>'approved_shadow','expires_at'=>$plan['expires_at'].'Z','fallback_mode'=>'load_first','writes_executed'=>false,'approved_at'=>gmdate(DATE_ATOM)];
+        return ['plan_id'=>$planId,'status'=>'approved_shadow','expires_at'=>$plan['expires_at'].'Z','fallback_mode'=>$fallback,'writes_executed'=>false,'approved_at'=>gmdate(DATE_ATOM)];
     }
 
     public function expireApprovedPlans(): int
     {
         $count=$this->pdo->exec("UPDATE plan_approvals SET status='expired' WHERE status='approved_shadow' AND expires_at IS NOT NULL AND expires_at<=UTC_TIMESTAMP(6)");
-        if($count>0)$this->pdo->exec("INSERT INTO operational_state(state_key,state_value,reason,updated_at) VALUES('requested_battery_mode','load_first','Den manuelt godkendte plan er udløbet',UTC_TIMESTAMP(6)) ON DUPLICATE KEY UPDATE state_value=VALUES(state_value),reason=VALUES(reason),updated_at=VALUES(updated_at)");
+        if($count>0){$fallback=$this->fallbackMode();$statement=$this->pdo->prepare("INSERT INTO operational_state(state_key,state_value,reason,updated_at) VALUES('requested_battery_mode',?,'Den godkendte plan er udløbet',UTC_TIMESTAMP(6)) ON DUPLICATE KEY UPDATE state_value=VALUES(state_value),reason=VALUES(reason),updated_at=VALUES(updated_at)");$statement->execute([$fallback]);}
         return (int)$count;
     }
 
@@ -79,6 +79,8 @@ final class PlanService
     }
 
     public static function csrfToken(string $modify='now'): string{return hash_hmac('sha256',(new DateTimeImmutable($modify,new DateTimeZone('UTC')))->format('Y-m-d'),(string)Env::get('APP_KEY','development-only'));}
+
+    private function fallbackMode():string{$value=$this->pdo->query("SELECT state_value FROM operational_state WHERE state_key='fallback_mode'")->fetchColumn();return in_array($value,['battery_first','load_first'],true)?(string)$value:'battery_first';}
 
     private function prices(int $hours):array{$rows=$this->pdo->query('SELECT interval_start,interval_end,spot_dkk_kwh FROM prices WHERE interval_end>=UTC_TIMESTAMP() AND interval_start<UTC_TIMESTAMP()+INTERVAL '.max(1,min(48,$hours)).' HOUR ORDER BY interval_start')->fetchAll();$tz=new DateTimeZone('Europe/Copenhagen');$tax=ElectricityTax::blendedRate();foreach($rows as &$r){$h=(int)(new DateTimeImmutable($r['interval_start'],new DateTimeZone('UTC')))->setTimezone($tz)->format('G');$tariff=$h<6?(float)Env::get('GRID_TARIFF_LOW_DKK','.1062'):($h>=17&&$h<21?(float)Env::get('GRID_TARIFF_PEAK_DKK','.4141'):(float)Env::get('GRID_TARIFF_HIGH_DKK','.1593'));$r['total_dkk_kwh']=round(((float)$r['spot_dkk_kwh']+$tariff+$tax+(float)Env::get('SUPPLIER_MARKUP_DKK','0'))*1.25,4);}unset($r);return$rows;}
     private function weather():array{$rows=$this->pdo->query('SELECT forecast_at,expected_pv_w FROM weather_forecasts WHERE forecast_at>=UTC_TIMESTAMP()-INTERVAL 1 HOUR')->fetchAll();$result=[];foreach($rows as$r)$result[(new DateTimeImmutable($r['forecast_at'],new DateTimeZone('UTC')))->format('Y-m-d-H')]=$r;return$result;}

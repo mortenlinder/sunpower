@@ -49,6 +49,23 @@ final class GrowattSphControl
         return ['mode'=>'load_first','priority_code'=>$priority,'before'=>$this->selected($before),'after'=>$this->selected($this->readHolding(1070,39)),'verified'=>true,'completed_at'=>gmdate(DATE_ATOM)];
     }
 
+    public function setBatteryFirst():array
+    {
+        $before=$this->readHolding(1070,39);
+        foreach(self::PERIOD_STARTS as$start)$this->writePeriod($start,$before[$start],$before[$start+1],0);
+        $this->writeVerified(1090,100);$this->writeVerified(1091,100);$this->writeVerified(1092,0);
+        $this->writePeriod(1100,0,(23<<8)|59,1);sleep(2);$priority=$this->readPriority();
+        if($priority!==1)throw new RuntimeException('Battery First blev skrevet, men priority-readback er ikke 1.');
+        return ['mode'=>'battery_first','priority_code'=>$priority,'ac_charge_enabled'=>false,'before'=>$this->selected($before),'after'=>$this->selected($this->readHolding(1070,39)),'verified'=>true,'completed_at'=>gmdate(DATE_ATOM)];
+    }
+
+    public function setFallbackMode(string $mode):array
+    {
+        if($mode==='battery_first')return $this->setBatteryFirst();
+        if($mode==='load_first')return $this->setLoadFirst();
+        throw new RuntimeException('Ukendt fallback-mode.');
+    }
+
     /** @param array<int|string,mixed> $raw */
     public function restoreSnapshot(array $raw):array
     {

@@ -11,6 +11,7 @@ use Solportalen\Repository\InsightRepository;
 use Solportalen\Energy\Planning\PlanService;
 use Solportalen\Integration\Supplier\ElprisSupplierService;
 use Solportalen\Repository\HistoryRepository;
+use Solportalen\Energy\Planning\AutomationSettings;
 
 header("Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'");
 header('X-Content-Type-Options: nosniff');
@@ -41,6 +42,8 @@ if ($path === '/api/v1/state') {
     exit;
 }
 if ($path === '/api/v1/history') {header('Content-Type: application/json; charset=utf-8');$range=(string)($_GET['range']??'24h');echo json_encode((new HistoryRepository(Connection::get()))->series($range),JSON_THROW_ON_ERROR);exit;}
+if ($path === '/api/v1/settings/automation' && ($_SERVER['REQUEST_METHOD']??'GET')==='GET') {header('Content-Type: application/json; charset=utf-8');echo json_encode((new AutomationSettings(Connection::get()))->get(),JSON_THROW_ON_ERROR);exit;}
+if ($path === '/api/v1/settings/automation' && ($_SERVER['REQUEST_METHOD']??'GET')==='POST') {header('Content-Type: application/json; charset=utf-8');try{$input=json_decode((string)file_get_contents('php://input'),true,16,JSON_THROW_ON_ERROR);$token=(string)($_SERVER['HTTP_X_SOLPORTAL_TOKEN']??'');$actor=(string)($_SERVER['REMOTE_ADDR']??'local');echo json_encode((new AutomationSettings(Connection::get()))->save($input,$token,$actor),JSON_THROW_ON_ERROR);}catch(Throwable$error){http_response_code(422);echo json_encode(['error'=>$error->getMessage()],JSON_THROW_ON_ERROR);}exit;}
 if ($path === '/api/v1/reports/energy') {header('Content-Type: application/json; charset=utf-8');$range=(string)($_GET['range']??'30d');echo json_encode((new HistoryRepository(Connection::get()))->report($range),JSON_THROW_ON_ERROR);exit;}
 if ($path === '/api/v1/insights') {
     header('Content-Type: application/json; charset=utf-8');
@@ -100,6 +103,8 @@ if ($path === '/commissioning') {
 if ($path === '/analytics') {
     require dirname(__DIR__) . '/resources/views/analytics.php';exit;
 }
+if ($path === '/settings/automation') {require dirname(__DIR__).'/resources/views/automation.php';exit;}
 
 $wallboard = $path === '/wallboard';
+try{$automationSettings=(new AutomationSettings(Connection::get()))->get();}catch(Throwable){$automationSettings=['enabled'=>false,'fallback_mode'=>'battery_first'];}
 require dirname(__DIR__) . '/resources/views/dashboard.php';

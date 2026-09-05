@@ -16,7 +16,7 @@ final class GrowattWindowCompiler
     public function compile(int $planId):array
     {
         $statement=$this->pdo->prepare("SELECT p.id,a.expires_at FROM plans p JOIN plan_approvals a ON a.plan_id=p.id WHERE p.id=? AND a.status='approved_shadow' AND a.expires_at>UTC_TIMESTAMP(6)");$statement->execute([$planId]);$plan=$statement->fetch();
-        if(!$plan)throw new RuntimeException('Kun en aktuel, manuelt godkendt plan kan anvendes.');
+        if(!$plan)throw new RuntimeException('Kun en aktuel, godkendt plan kan anvendes.');
         $until=min(time()+86400,strtotime((string)$plan['expires_at'].' UTC'));
         $rows=$this->pdo->prepare('SELECT starts_at,ends_at,action,power_w,soc_after,baseline_cost,optimized_cost FROM plan_intervals WHERE plan_id=? AND ends_at>UTC_TIMESTAMP(6) AND starts_at<FROM_UNIXTIME(?) ORDER BY starts_at');$rows->execute([$planId,$until]);
         $groups=['charge_grid'=>[],'discharge'=>[]];$tz=new DateTimeZone('Europe/Copenhagen');

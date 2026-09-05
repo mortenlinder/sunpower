@@ -19,6 +19,8 @@ use Solportalen\Integration\Supplier\ElprisSupplierService;
 use Solportalen\Energy\Planning\PlanService;
 use Solportalen\Integration\Ocpp\OcppServer;
 use Solportalen\Repository\HistoryRepository;
+use Solportalen\Energy\Planning\AutomationSettings;
+use Solportalen\Energy\Planning\AutomaticPlanService;
 
 $command = $argv[1] ?? 'help';
 if (in_array('--help', $argv, true) || $command === 'help') {
@@ -83,7 +85,7 @@ try {
             $audit->execute([$command,json_encode($result,JSON_THROW_ON_ERROR)]);
             echo json_encode($result,JSON_PRETTY_PRINT|JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR).PHP_EOL;break;
         case 'scheduler:run':
-            $pdo=Connection::get();$plans=new PlanService($pdo);$result=['expired_plans'=>$plans->expireApprovedPlans()];$result+=(new ExternalDataService($pdo))->refresh();try{$result['suppliers']=(new ElprisSupplierService($pdo))->refresh();}catch(Throwable $e){$result['suppliers']='error: '.$e->getMessage();}$result['plan_id']=$plans->generate(48);echo json_encode($result, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR) . PHP_EOL; break;
+            $pdo=Connection::get();$plans=new PlanService($pdo);$settings=(new AutomationSettings($pdo))->get();$result=['expired_plans'=>$plans->expireApprovedPlans()];$result+=(new ExternalDataService($pdo))->refresh();try{$result['suppliers']=(new ElprisSupplierService($pdo))->refresh();}catch(Throwable $e){$result['suppliers']='error: '.$e->getMessage();}$result['plan_id']=$plans->generate((int)$settings['horizon_hours']);$result['automation']=(new AutomaticPlanService($pdo))->run($result['plan_id']);echo json_encode($result, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR) . PHP_EOL; break;
         case 'supplier:refresh':
             $service=new ElprisSupplierService(Connection::get());echo json_encode(['result'=>$service->refresh(true),'comparison'=>$service->comparison()],JSON_PRETTY_PRINT|JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR).PHP_EOL;break;
         case 'optimizer:run':
