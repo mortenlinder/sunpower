@@ -14,10 +14,12 @@ final class AutomationSettings
 
     public function get(): array
     {
-        $keys=['intelligent_control_enabled','intelligent_control_until','plan_horizon_hours','fallback_mode','last_auto_plan_date'];
+        $keys=['intelligent_control_enabled','intelligent_control_until','plan_horizon_hours','fallback_mode','last_auto_plan_date','last_auto_price_until'];
         $quoted="'".implode("','",$keys)."'";$rows=$this->pdo->query("SELECT state_key,state_value FROM operational_state WHERE state_key IN ($quoted)")->fetchAll();$values=[];
         foreach($rows as$row)$values[$row['state_key']]=$row['state_value'];
-        return ['enabled'=>($values['intelligent_control_enabled']??'0')==='1','enabled_until'=>($values['intelligent_control_until']??'')?:null,'horizon_hours'=>(int)($values['plan_horizon_hours']??48),'fallback_mode'=>$values['fallback_mode']??'battery_first','last_auto_plan_date'=>($values['last_auto_plan_date']??'')?:null,'csrf_token'=>PlanService::csrfToken()];
+        $latest=$this->pdo->query("SELECT id,status,payload_json,created_at,completed_at,error_message FROM commands WHERE reason='Daglig intelligent styring' ORDER BY id DESC LIMIT 1")->fetch()?:null;$lastPlan=null;
+        if($latest){$payload=json_decode((string)$latest['payload_json'],true);$planId=(int)($payload['plan_id']??0);$expiry=null;if($planId){$q=$this->pdo->prepare('SELECT expires_at FROM plan_approvals WHERE plan_id=?');$q->execute([$planId]);$expiry=$q->fetchColumn()?:null;}$lastPlan=['plan_id'=>$planId,'command_status'=>$latest['status'],'queued_at'=>$latest['created_at'],'applied_at'=>$latest['completed_at'],'expires_at'=>$expiry,'error'=>$latest['error_message']];}
+        return ['enabled'=>($values['intelligent_control_enabled']??'0')==='1','enabled_until'=>($values['intelligent_control_until']??'')?:null,'horizon_hours'=>(int)($values['plan_horizon_hours']??48),'fallback_mode'=>$values['fallback_mode']??'battery_first','last_auto_plan_date'=>($values['last_auto_plan_date']??'')?:null,'last_auto_price_until'=>($values['last_auto_price_until']??'')?:null,'last_auto_plan'=>$lastPlan,'csrf_token'=>PlanService::csrfToken()];
     }
 
     public function save(array $input,string $token,string $actor):array
