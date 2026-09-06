@@ -1,0 +1,20 @@
+[Unit]
+Description=Solportalen Watts Live MQTT worker
+After=network-online.target mariadb.service mosquitto.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=solportal
+Group=solportal-app
+ExecStart=/usr/bin/php /opt/solportalen/bin/solportal worker:watts-mqtt
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/solportalen/var
+
+[Install]
+WantedBy=multi-user.target

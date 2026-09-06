@@ -59,6 +59,41 @@ final class StateRepository
         return $state;
     }
 
+    public function storeExternal(array $signals, string $source, string $quality, string $sourceTimestamp): void
+    {
+        $sourceAt = $this->sqlTime($sourceTimestamp);
+        $receivedAt = gmdate('Y-m-d H:i:s.u');
+        $upsert = $this->pdo->prepare('INSERT INTO current_state (signal_name,value_json,source,quality,source_timestamp,received_timestamp) VALUES (?,?,?,?,?,?) ON DUPLICATE KEY UPDATE value_json=VALUES(value_json),source=VALUES(source),quality=VALUES(quality),source_timestamp=VALUES(source_timestamp),received_timestamp=VALUES(received_timestamp)');
+        $history = $this->pdo->prepare('INSERT INTO telemetry (signal_name,value_decimal,value_text,source,quality,source_timestamp,received_timestamp) VALUES (?,?,?,?,?,?,?)');
+        $this->pdo->beginTransaction();
+        try {
+            foreach ($signals as $name => $value) {
+                if (!is_scalar($value) || in_array($name, ['source', 'quality'], true)) continue;
+                $upsert->execute([$name, json_encode($value, JSON_THROW_ON_ERROR), $source, $quality, $sourceAt, $receivedAt]);
+                $history->execute([$name, is_numeric($value) ? $value : null, (string) $value, $source, $quality, $sourceAt, $receivedAt]);
+            }
+            $this->heartbeat('watts_mqtt', 'ok', ['signals' => count($signals)]);
+            $this->pdo->commit();
+        } catch (\Throwable $error) {
+            $this->pdo->rollBack();
+            throw $error;
+        }
+    }
+
+    public function applyFreshWattsGrid(array $state, int $maxAgeSeconds = 20): array
+    {
+        $statement = $this->pdo->prepare("SELECT value_json,source_timestamp FROM current_state WHERE signal_name='grid_power_w' AND source='watts_mqtt' AND source_timestamp>=UTC_TIMESTAMP(6)-INTERVAL ? SECOND");
+        $statement->execute([$maxAgeSeconds]);
+        $row = $statement->fetch();
+        if (!is_array($row)) return $state;
+        $grid = (float) json_decode((string) $row['value_json'], true, 8, JSON_THROW_ON_ERROR);
+        $state['grid_power_w'] = $grid;
+        $state['load_power_w'] = max(0.0, (float) ($state['pv_power_w'] ?? 0) + $grid + (float) ($state['battery_power_w'] ?? 0));
+        $state['data_quality'] = 'measured_grid_energy_balance';
+        $state['grid_data_source'] = 'watts_mqtt';
+        return $state;
+    }
+
     public function heartbeat(string $worker, string $status, array $details): void
     {
         $statement = $this->pdo->prepare('INSERT INTO worker_heartbeats(worker,heartbeat_at,status,details_json) VALUES (?,UTC_TIMESTAMP(6),?,?) ON DUPLICATE KEY UPDATE heartbeat_at=VALUES(heartbeat_at),status=VALUES(status),details_json=VALUES(details_json)');

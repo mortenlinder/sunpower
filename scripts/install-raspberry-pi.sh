@@ -28,6 +28,8 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y \
     logrotate \
     ca-certificates \
     curl
+    mosquitto \
+    mosquitto-clients
 
 systemctl enable --now mariadb apache2
 
@@ -156,6 +158,7 @@ install -m 0644 "$APP_DIR/systemd/solportal-device.service" /etc/systemd/system/
 install -m 0644 "$APP_DIR/systemd/solportal-forecast.service" /etc/systemd/system/solportal-forecast.service
 install -m 0644 "$APP_DIR/systemd/solportal-forecast.timer" /etc/systemd/system/solportal-forecast.timer
 install -m 0644 "$APP_DIR/systemd/solportal-ocpp.service" /etc/systemd/system/solportal-ocpp.service
+install -m 0644 "$APP_DIR/systemd/solportal-watts-mqtt.service" /etc/systemd/system/solportal-watts-mqtt.service
 systemctl daemon-reload
 
 runuser -u solportal -- php "$APP_DIR/bin/solportal" database:migrate

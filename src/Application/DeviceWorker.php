@@ -23,7 +23,7 @@ final class DeviceWorker
         $failures = 0;
         do {
             try {
-                $state = $reader->readState();
+                $state = $repository->applyFreshWattsGrid($reader->readState());
                 $repository->store($state);
                 $detector->observe((float) ($state['load_power_w'] ?? 0));
                 $commands->tick();
