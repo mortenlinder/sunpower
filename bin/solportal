@@ -93,6 +93,10 @@ try {
             $service=new ElprisSupplierService(Connection::get());echo json_encode(['result'=>$service->refresh(true),'comparison'=>$service->comparison()],JSON_PRETTY_PRINT|JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR).PHP_EOL;break;
         case 'watts:test':
             echo json_encode((new WattsApiClient())->probe(),JSON_PRETTY_PRINT|JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR).PHP_EOL;break;
+        case 'automation:run':
+            $pdo=Connection::get();$settings=(new AutomationSettings($pdo))->get();
+            $id=(new PlanService($pdo))->generate((int)$settings['horizon_hours']);
+            echo json_encode((new AutomaticPlanService($pdo))->run($id),JSON_PRETTY_PRINT|JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR).PHP_EOL;break;
         case 'optimizer:run':
             $service=new PlanService(Connection::get());$id=$service->generate((int)($argv[2]??48));echo json_encode(['plan_id'=>$id,'plan'=>$service->latest()],JSON_PRETTY_PRINT|JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR).PHP_EOL;break;
         case 'telemetry:aggregate': echo json_encode(['rows'=>(new HistoryRepository(Connection::get()))->aggregate()],JSON_PRETTY_PRINT).PHP_EOL;break;

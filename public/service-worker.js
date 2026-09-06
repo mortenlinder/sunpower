@@ -1,6 +1,6 @@
 'use strict';
-const CACHE = 'solportal-shell-v13';
-const SHELL = ['/', '/analytics', '/settings/automation', '/assets/css/app.css?v=9', '/assets/css/analytics.css?v=1', '/assets/css/automation.css?v=2', '/assets/css/insights.css?v=2', '/assets/css/learning.css', '/assets/css/plan.css', '/assets/css/control.css?v=9', '/assets/js/app.js?v=9', '/assets/js/analytics.js?v=1', '/assets/js/automation.js?v=4', '/assets/images/growatt-inverter-studio.png', '/manifest.webmanifest'];
+const CACHE = 'solportal-shell-v14';
+const SHELL = ['/', '/analytics', '/settings/automation', '/assets/css/app.css?v=9', '/assets/css/analytics.css?v=1', '/assets/css/automation.css?v=2', '/assets/css/insights.css?v=2', '/assets/css/learning.css', '/assets/css/plan.css', '/assets/css/control.css?v=9', '/assets/js/app.js?v=10', '/assets/js/analytics.js?v=1', '/assets/js/automation.js?v=4', '/assets/images/growatt-inverter-studio.png', '/manifest.webmanifest'];
 self.addEventListener('install', event => event.waitUntil(
     caches.open(CACHE).then(cache => cache.addAll(SHELL)).then(() => self.skipWaiting())
 ));

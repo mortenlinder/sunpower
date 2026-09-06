@@ -14,7 +14,7 @@ $automationEnabled = (bool)($automationSettings['enabled'] ?? false);
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#06110e"><title>Solportalen</title>
   <link rel="manifest" href="/manifest.webmanifest"><link rel="stylesheet" href="/assets/css/app.css?v=9"><link rel="stylesheet" href="/assets/css/insights.css?v=2"><link rel="stylesheet" href="/assets/css/learning.css"><link rel="stylesheet" href="/assets/css/plan.css"><link rel="stylesheet" href="/assets/css/control.css?v=9">
-  <script src="/assets/js/app.js?v=9" defer></script>
+  <script src="/assets/js/app.js?v=10" defer></script>
 </head>
 <body class="<?= $wallboard ? 'wallboard' : '' ?>" data-mode="<?= htmlspecialchars($mode, ENT_QUOTES) ?>">
 <header>

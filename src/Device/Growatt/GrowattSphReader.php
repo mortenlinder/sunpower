@@ -17,6 +17,7 @@ final class GrowattSphReader
         $base = $this->read(0, 50);
         $hybrid = $this->read(1000, 50);
         $priority = $this->read(118, 1)[0] ?? null;
+        $chargeSettings = RtuCodec::decodeReadResponse($this->transport->exchange(RtuCodec::readRequest($this->slaveId,3,1090,3)),$this->slaveId,3);
         $now = gmdate(DATE_ATOM);
         $charge = $this->u32($hybrid, 11) * 0.1;
         $discharge = $this->u32($hybrid, 9) * 0.1;
@@ -44,6 +45,9 @@ final class GrowattSphReader
             'device_status_code' => $base[0] ?? null,
             'device_mode' => 'growatt_modbus_rtu',
             'priority_code' => $priority,
+            'ac_charge_enabled' => $chargeSettings[2] === 1,
+            'charge_power_pct' => $chargeSettings[0],
+            'charge_stop_soc_pct' => $chargeSettings[1],
             'priority_mode' => match($priority){0=>'load_first',1=>'battery_first',2=>'grid_first',default=>'unknown'},
             'pv_power_w' => $pv,
             'pv1_voltage_v' => ($base[3] ?? 0) * 0.1,

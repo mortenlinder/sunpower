@@ -108,11 +108,14 @@ function renderPlan(plan) {
     const active=rows.filter(row=>row.action!=='hold');document.querySelector('#plan-rows').innerHTML=(active.length?active:rows.slice(0,8)).map(row=>`<tr><td>${new Date(row.starts_at+'Z').toLocaleString('da-DK',{weekday:'short',hour:'2-digit',minute:'2-digit'})}</td><td><span class="action-pill ${row.action}">${actionName(row.action)}</span></td><td>${Number(row.power_w)?fmt(row.power_w):'—'}</td><td>${Number(row.soc_before).toFixed(0)} → ${Number(row.soc_after).toFixed(0)} %</td><td>${Number(row.buy_price).toLocaleString('da-DK',{minimumFractionDigits:2,maximumFractionDigits:2})}</td><td>${row.explanation}</td></tr>`).join('');
     const button=document.querySelector('#approve-plan'),apply=document.querySelector('#apply-plan');button.disabled=false;button.dataset.planId=plan.id;button.dataset.token=plan.csrf_token;apply.disabled=true;
     const fallbackName=plan.fallback_mode==='load_first'?'Load First':'Battery First';
+    button.classList.remove('approved');button.textContent='Gem og godkend planen';apply.textContent='Anvend på inverter';
+    document.querySelector('#approval-title').textContent=`Planforslag #${plan.id}`;
+    document.querySelector('#approval-copy').textContent=plan.active_plan_id?`Inverteren følger plan #${plan.active_plan_id}. Tabellen viser det seneste forslag.`:'Forslaget er endnu ikke anvendt på inverteren.';
     if(plan.approval_status==='approved_shadow'){button.textContent=plan.approved_by==='system:auto'?'Automatisk godkendt':'Plan gemt og godkendt';button.classList.add('approved');button.disabled=true;apply.disabled=!plan.writes_enabled||plan.approved_by==='system:auto';document.querySelector('#approval-title').textContent=plan.approved_by==='system:auto'?'Automatisk plan':'Godkendt plan';document.querySelector('#approval-copy').textContent=`Gyldig til ${new Date(plan.expires_at+'Z').toLocaleString('da-DK')}. Derefter vælges ${fallbackName}.`}
     if(plan.apply_command?.status==='pending'||plan.apply_command?.status==='claimed'){apply.disabled=true;apply.textContent='Sender til inverter…'}
-    if(plan.apply_command?.status==='verified'){apply.disabled=true;apply.textContent='Anvendt på inverter';document.querySelector('#approval-copy').textContent='Growatt-vinduerne er skrevet og verificeret. Automatisk replanning er ikke aktiv.'}
+    if(plan.apply_command?.status==='verified'){apply.disabled=true;apply.textContent='Anvendt på inverter';document.querySelector('#approval-copy').textContent=plan.approved_by==='system:auto'?'Growatt-vinduerne er verificeret. Planen genvurderes løbende ud fra batteriniveau, forbrug og priser.':'Growatt-vinduerne er skrevet og verificeret.'}
     if(plan.apply_command?.status==='failed'){apply.disabled=false;apply.textContent='Prøv anvendelse igen';document.querySelector('#approval-copy').textContent=plan.apply_command.error_message||'Anvendelsen fejlede og blev rullet tilbage.'}
-    if(plan.approval_status==='expired'){button.textContent='Planen er udløbet';button.classList.remove('approved');button.disabled=true;document.querySelector('#approval-title').textContent=`${fallbackName} er aktiv`;document.querySelector('#approval-copy').textContent=`Planens gyldighed er slut. Fallback er registreret som ${fallbackName}.`}
+    if(plan.approval_status==='expired'){button.textContent='Planen er udløbet';button.classList.remove('approved');button.disabled=true;document.querySelector('#approval-title').textContent='Planen er udløbet';document.querySelector('#approval-copy').textContent=`Standardtilstand er ${fallbackName}. Aktuel invertertilstand vises øverst.`}
     drawPlan(plan);
 }
 
@@ -149,6 +152,8 @@ function describe(state) {
     document.querySelector('.soc-bar').style.setProperty('--soc', `${soc}%`);
     document.querySelector('#battery-fill').style.setProperty('--soc', `${soc}%`);
     document.querySelector('#flow-grid-label').textContent = state.grid_power_w >= 0 ? 'import' : 'eksport';
+    const execution=state.plan_execution;
+    if(execution?.message)document.querySelector('#summary').textContent=`${execution.plan_id?'Aktiv plan #'+execution.plan_id+' · ':''}${execution.message}`;
 }
 
 function animateFlows(state) {

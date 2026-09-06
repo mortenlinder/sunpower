@@ -17,10 +17,13 @@ final class GrowattWindowCompiler
     {
         $statement=$this->pdo->prepare("SELECT p.id,a.expires_at FROM plans p JOIN plan_approvals a ON a.plan_id=p.id WHERE p.id=? AND a.status='approved_shadow' AND a.expires_at>UTC_TIMESTAMP(6)");$statement->execute([$planId]);$plan=$statement->fetch();
         if(!$plan)throw new RuntimeException('Kun en aktuel, godkendt plan kan anvendes.');
-        $until=min(time()+86400,strtotime((string)$plan['expires_at'].' UTC'));
+        // Growatt slots contain clock times, not dates. Only write today's slots;
+        // the rolling scheduler loads the next day after midnight.
+        $midnight=(new DateTimeImmutable('tomorrow',new DateTimeZone('Europe/Copenhagen')))->setTime(0,0)->getTimestamp();
+        $until=min($midnight,strtotime((string)$plan['expires_at'].' UTC'));
         $rows=$this->pdo->prepare('SELECT starts_at,ends_at,action,power_w,soc_after,baseline_cost,optimized_cost FROM plan_intervals WHERE plan_id=? AND ends_at>UTC_TIMESTAMP(6) AND starts_at<FROM_UNIXTIME(?) ORDER BY starts_at');$rows->execute([$planId,$until]);
         $groups=['charge_grid'=>[],'discharge'=>[]];$tz=new DateTimeZone('Europe/Copenhagen');
-        foreach($rows->fetchAll()as$row){$action=(string)$row['action'];if(!isset($groups[$action]))continue;$start=new DateTimeImmutable($row['starts_at'],new DateTimeZone('UTC'));$end=new DateTimeImmutable($row['ends_at'],new DateTimeZone('UTC'));
+        foreach($rows->fetchAll()as$row){$action=(string)$row['action'];if(!isset($groups[$action]))continue;$start=new DateTimeImmutable($row['starts_at'],new DateTimeZone('UTC'));$end=new DateTimeImmutable($row['ends_at'],new DateTimeZone('UTC'));if($end->getTimestamp()>$until)$end=new DateTimeImmutable('@'.$until);
             foreach($this->splitMidnight($start->setTimezone($tz),$end->setTimezone($tz))as[$localStart,$localEnd]){$last=array_key_last($groups[$action]);$benefit=max(0,(float)$row['baseline_cost']-(float)$row['optimized_cost']);if($last!==null&&$groups[$action][$last]['end']->getTimestamp()===$localStart->getTimestamp()){$groups[$action][$last]['end']=$localEnd;$groups[$action][$last]['benefit']+=$benefit;$groups[$action][$last]['power_w']=max($groups[$action][$last]['power_w'],(int)$row['power_w']);$groups[$action][$last]['soc_after']=(float)$row['soc_after'];}else{$groups[$action][]=['start'=>$localStart,'end'=>$localEnd,'benefit'=>$benefit,'power_w'=>(int)$row['power_w'],'soc_after'=>(float)$row['soc_after']];}}
         }
         $charge=$this->bestThree($groups['charge_grid']);$discharge=$this->bestThree($groups['discharge']);
@@ -30,7 +33,16 @@ final class GrowattWindowCompiler
 
     /** @return list<array{0:DateTimeImmutable,1:DateTimeImmutable}> */
     private function splitMidnight(DateTimeImmutable $start,DateTimeImmutable $end):array{$result=[];while($start<$end){$midnight=$start->modify('tomorrow')->setTime(0,0);$partEnd=$end<$midnight?$end:$midnight;$result[]=[$start,$partEnd];$start=$partEnd;}return$result;}
-    private function bestThree(array $groups):array{usort($groups,static fn($a,$b)=>$b['benefit']<=>$a['benefit']);$groups=array_slice($groups,0,3);usort($groups,static fn($a,$b)=>$a['start']<=>$b['start']);return$groups;}
+    private function bestThree(array $groups):array{return self::selectWindows($groups,time());}
+    public static function selectWindows(array $groups,int $now):array
+    {
+        usort($groups,static function($a,$b)use($now):int{
+            $activeA=$a['start']->getTimestamp()<=$now&&$a['end']->getTimestamp()>$now;
+            $activeB=$b['start']->getTimestamp()<=$now&&$b['end']->getTimestamp()>$now;
+            return ($activeB<=>$activeA)?:($b['benefit']<=>$a['benefit']);
+        });
+        $groups=array_slice($groups,0,3);usort($groups,static fn($a,$b)=>$a['start']<=>$b['start']);return$groups;
+    }
     private function periods(array $groups):array{return array_map(function($g):array{$end=$g['end'];$stop=$end->format('H:i')==='00:00'?(23<<8)|59:$this->packed($end);return['start'=>$this->packed($g['start']),'stop'=>$stop,'enabled'=>1,'label'=>$g['start']->format('d/m H:i').'–'.$g['end']->format('d/m H:i')];},$groups);}
     private function packed(DateTimeImmutable $time):int{return((int)$time->format('G')<<8)|(int)$time->format('i');}
     private function powerPercent(int $watts,int $maximum):int{return$watts<=0?0:max(10,min(100,(int)ceil($watts/max(1,$maximum)*100)));}

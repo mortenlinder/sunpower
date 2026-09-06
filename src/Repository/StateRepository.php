@@ -47,7 +47,9 @@ final class StateRepository
         $rows = $this->pdo->query('SELECT signal_name,value_json,quality,source_timestamp,received_timestamp FROM current_state')->fetchAll();
         $state = [];
         $latest = null;
+        $inverterReceived = null;
         foreach ($rows as $row) {
+            if ($row['signal_name'] === 'priority_mode') $inverterReceived = $row['received_timestamp'];
             $state[$row['signal_name']] = json_decode($row['value_json'], true, 8, JSON_THROW_ON_ERROR);
             $latest = $latest === null || $row['received_timestamp'] > $latest ? $row['received_timestamp'] : $latest;
         }
@@ -56,6 +58,12 @@ final class StateRepository
             $state['received_timestamp'] = $state['source_timestamp'];
             $state['data_quality'] = $rows[0]['quality'] ?? 'unknown';
         }
+        $scheduleRaw=$this->pdo->query("SELECT state_value FROM operational_state WHERE state_key='manual_schedule'")->fetchColumn();
+        $schedule=$scheduleRaw?json_decode((string)$scheduleRaw,true):[];
+        $executionState=$state;
+        // Fresh Watts samples must not make old inverter measurements appear verified.
+        $executionState['received_timestamp']=$inverterReceived===null?'1970-01-01 UTC':$inverterReceived.' UTC';
+        $state['plan_execution']=\Solportalen\Energy\Planning\ExecutionStatus::describe(is_array($schedule)?$schedule:[],$executionState,time());
         return $state;
     }
 

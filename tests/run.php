@@ -32,5 +32,32 @@ $test('Optimizer moves cheap energy to expensive interval', static function () u
     $rows=(new DynamicProgrammingOptimizer())->optimize($intervals,['soc_pct'=>20,'capacity_kwh'=>5,'min_soc_pct'=>20,'reserve_pct'=>20,'max_soc_pct'=>90,'max_charge_w'=>2500,'max_discharge_w'=>2500,'round_trip_efficiency'=>.9,'wear_dkk_kwh'=>.05]);
     $assert($rows[0]['action']==='charge_grid','Expected cheap grid charging');$assert($rows[1]['action']==='discharge','Expected expensive-period discharge');$assert(array_sum(array_column($rows,'optimized_cost'))<array_sum(array_column($rows,'baseline_cost')),'Expected a saving');
 });
+$test('Automation refreshes SOC/load without new market prices', static function()use($assert):void{
+    $now=strtotime('2026-09-06 10:30:00 UTC');$price='2026-09-06 22:00:00';
+    $last=['command_status'=>'verified','queued_at'=>'2026-09-06 10:10:00'];
+    $assert(Solportalen\Energy\Planning\AutomaticPlanService::refreshDue($last,$price,$price,$now));
+    $last['queued_at']='2026-09-06 10:29:00';
+    $assert(!Solportalen\Energy\Planning\AutomaticPlanService::refreshDue($last,$price,$price,$now));
+    $assert(Solportalen\Energy\Planning\AutomaticPlanService::refreshDue($last,'2026-09-07 22:00:00',$price,$now));
+    $last['command_status']='claimed';
+    $assert(!Solportalen\Energy\Planning\AutomaticPlanService::refreshDue($last,'2026-09-07 22:00:00',$price,$now));
+});
+$test('Current charge window survives Growatt three-slot limit',static function()use($assert):void{
+    $groups=[];foreach([10,12,14,16]as$h)$groups[]=['start'=>new DateTimeImmutable("2026-09-06 $h:00:00 UTC"),'end'=>new DateTimeImmutable("2026-09-06 $h:30:00 UTC"),'benefit'=>$h===10?0:100];
+    $selected=Solportalen\Energy\Planning\GrowattWindowCompiler::selectWindows($groups,strtotime('2026-09-06 10:15:00 UTC'));
+    $assert(count($selected)===3);$assert($selected[0]['start']->format('H:i')==='10:00');
+});
+$test('Execution status distinguishes desired charging from measured charging and target reached',static function()use($assert):void{
+    $now=strtotime('2026-09-06 10:30:00 UTC');
+    $schedule=['plan_id'=>1,'valid_until'=>'2026-09-06T22:00:00Z','battery_periods'=>[['start'=>12<<8,'stop'=>14<<8,'enabled'=>1]],'charge_stop_soc_pct'=>93];
+    $state=['received_timestamp'=>gmdate(DATE_ATOM,$now),'priority_mode'=>'load_first','ac_charge_enabled'=>true,'battery_charge_power_w'=>0,'battery_soc_pct'=>40];
+    $assert(Solportalen\Energy\Planning\ExecutionStatus::describe($schedule,$state,$now)['status']==='mismatch');
+    $state['priority_mode']='battery_first';$state['battery_charge_power_w']=2570;
+    $assert(Solportalen\Energy\Planning\ExecutionStatus::describe($schedule,$state,$now)['status']==='charging');
+    $state['battery_soc_pct']=93;$state['battery_charge_power_w']=0;
+    $assert(Solportalen\Energy\Planning\ExecutionStatus::describe($schedule,$state,$now)['status']==='target_reached');
+    $assert(Solportalen\Energy\Planning\ExecutionStatus::describe($schedule,$state,$now+60)['status']==='stale');
+    $assert(Solportalen\Energy\Planning\ExecutionStatus::describe($schedule,$state,strtotime('2026-09-07 UTC'))['status']==='no_active_plan');
+});
 foreach ($tests as [$ok,$name]) echo ($ok ? 'PASS ' : 'FAIL ') . $name . PHP_EOL;
 $failed = count(array_filter($tests, static fn ($t) => !$t[0])); echo sprintf("%d tests, %d fejl\n", count($tests), $failed); if ($failed) exit(1);

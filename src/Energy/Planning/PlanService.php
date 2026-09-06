@@ -46,6 +46,8 @@ final class PlanService
         $statement=$this->pdo->prepare('SELECT starts_at,ends_at,action,power_w,soc_before,soc_after,buy_price,baseline_cost,optimized_cost,explanation,confidence FROM plan_intervals WHERE plan_id=? ORDER BY starts_at');$statement->execute([$plan['id']]);$rows=$statement->fetchAll();
         $mode=$this->pdo->query("SELECT state_value FROM operational_state WHERE state_key='requested_battery_mode'")->fetchColumn();$fallback=$this->fallbackMode();
         $command=$this->pdo->prepare("SELECT id,status,error_message,completed_at FROM commands WHERE command_type='apply_approved_plan' AND JSON_UNQUOTE(JSON_EXTRACT(payload_json,'$.plan_id'))=? ORDER BY id DESC LIMIT 1");$command->execute([(string)$plan['id']]);
+        $raw=$this->pdo->query("SELECT state_value FROM operational_state WHERE state_key='manual_schedule'")->fetchColumn();$applied=$raw?json_decode((string)$raw,true):[];
+        $plan['active_plan_id']=isset($applied['valid_until'])&&strtotime($applied['valid_until'])>time()?($applied['plan_id']??null):null;
         $plan['intervals']=$rows;$plan['horizon_hours']=$rows===[]?0:round((strtotime(end($rows)['ends_at'])-strtotime($rows[0]['starts_at']))/3600,1);$plan['action_intervals']=count(array_filter($rows,fn($r)=>$r['action']!=='hold'));$plan['csrf_token']=self::csrfToken();$plan['requested_battery_mode']=$mode?:$fallback;$plan['fallback_mode']=$fallback;$plan['writes_enabled']=Env::bool('WRITES_ENABLED');$plan['apply_command']=$command->fetch()?:null;return $plan;
     }
 
