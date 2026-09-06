@@ -12,13 +12,15 @@ final class WattsMqttWorker
 {
     public function run(): void
     {
-        $password = (string) Env::get('WATTS_MQTT_PASSWORD', '');
-        if ($password === '') throw new RuntimeException('WATTS_MQTT_PASSWORD mangler.');
         $command = [
             '/usr/bin/mosquitto_sub', '-h', Env::get('WATTS_MQTT_HOST', '127.0.0.1'),
-            '-p', Env::get('WATTS_MQTT_PORT', '1883'), '-u', Env::get('WATTS_MQTT_USER', 'solportal'),
-            '-P', $password, '-t', Env::get('WATTS_MQTT_TOPIC', 'watts/+/measurement'),
+            '-p', Env::get('WATTS_MQTT_PORT', '1884'),
         ];
+        $username = (string) Env::get('WATTS_MQTT_USER', '');
+        $password = (string) Env::get('WATTS_MQTT_PASSWORD', '');
+        if ($username !== '') array_push($command, '-u', $username);
+        if ($password !== '') array_push($command, '-P', $password);
+        array_push($command, '-t', Env::get('WATTS_MQTT_TOPIC', 'watts/+/measurement'));
         $pipes = [];
         $process = proc_open($command, [['pipe', 'r'], ['pipe', 'w'], ['pipe', 'w']], $pipes);
         if (!is_resource($process)) throw new RuntimeException('mosquitto_sub kunne ikke startes.');

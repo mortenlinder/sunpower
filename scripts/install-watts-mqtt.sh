@@ -13,15 +13,19 @@ fi
 apt-get update
 DEBIAN_FRONTEND=noninteractive apt-get install -y mosquitto mosquitto-clients
 
-subscriber_password=$(sed -n 's/^WATTS_MQTT_PASSWORD=//p' "$ENV_FILE" | head -n 1)
-if [ -z "$subscriber_password" ]; then
-    subscriber_password=$(od -An -N24 -tx1 /dev/urandom | tr -d ' \n')
-    printf 'WATTS_MQTT_HOST=127.0.0.1\nWATTS_MQTT_PORT=1883\nWATTS_MQTT_USER=solportal\nWATTS_MQTT_PASSWORD=%s\nWATTS_MQTT_TOPIC=watts/+/measurement\n' "$subscriber_password" >> "$ENV_FILE"
-fi
+temporary=$(mktemp "$APP_DIR/.env.mqtt.XXXXXX")
+grep -v '^WATTS_MQTT_HOST=' "$ENV_FILE" \
+    | grep -v '^WATTS_MQTT_PORT=' \
+    | grep -v '^WATTS_MQTT_USER=' \
+    | grep -v '^WATTS_MQTT_PASSWORD=' \
+    | grep -v '^WATTS_MQTT_TOPIC=' > "$temporary"
+printf 'WATTS_MQTT_HOST=127.0.0.1\nWATTS_MQTT_PORT=1884\nWATTS_MQTT_USER=\nWATTS_MQTT_PASSWORD=\nWATTS_MQTT_TOPIC=watts/+/measurement\n' >> "$temporary"
+chown root:solportal-app "$temporary"
+chmod 0640 "$temporary"
+mv "$temporary" "$ENV_FILE"
 
 device_password=$(od -An -N12 -tx1 /dev/urandom | tr -d ' \n')
-mosquitto_passwd -b -c /etc/mosquitto/passwd solportal "$subscriber_password"
-mosquitto_passwd -b /etc/mosquitto/passwd wattslive "$device_password"
+mosquitto_passwd -b -c /etc/mosquitto/passwd wattslive "$device_password"
 chown root:mosquitto /etc/mosquitto/passwd
 chmod 0640 /etc/mosquitto/passwd
 
@@ -34,18 +38,20 @@ cat > /etc/mosquitto/acl.solportalen <<'ACL'
 user wattslive
 topic write watts/+/measurement
 
-user solportal
-topic read watts/+/measurement
 ACL
 chown root:mosquitto /etc/mosquitto/acl.solportalen
 chmod 0640 /etc/mosquitto/acl.solportalen
 
 cat > /etc/mosquitto/conf.d/solportalen.conf <<'CONF'
+per_listener_settings true
 listener 1883 0.0.0.0
 allow_anonymous false
 password_file /etc/mosquitto/passwd
 acl_file /etc/mosquitto/acl.solportalen
 persistence true
+
+listener 1884 127.0.0.1
+allow_anonymous true
 CONF
 
 install -o root -g root -m 0644 "$APP_DIR/systemd/solportal-watts-mqtt.service" /etc/systemd/system/solportal-watts-mqtt.service
