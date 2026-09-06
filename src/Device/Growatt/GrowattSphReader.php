@@ -22,13 +22,30 @@ final class GrowattSphReader
         $discharge = $this->u32($hybrid, 9) * 0.1;
         $toGrid = $this->u32($hybrid, 29) * 0.1;
         $toUser = $this->u32($hybrid, 21) * 0.1;
+        $pv = $this->u32($base, 1) * 0.1;
+        $reportedLocalLoad = $this->u32($hybrid, 37) * 0.1;
+        // Protocol II's "local load" is zero on this installation while real
+        // house consumption is present. Normally the documented balance is
+        // sufficient. During AC battery charging this firmware omits the
+        // charger demand from Pactouser; detect that impossible negative load
+        // and calculate a coherent house/grid pair instead.
+        $documentedLoad = $pv + $discharge + $toUser - $toGrid - $charge;
+        if ($documentedLoad >= -50) {
+            $load = max(0.0, $documentedLoad);
+            $grid = $toUser - $toGrid;
+            $calculationMode = 'growatt_energy_balance';
+        } else {
+            $load = max(0.0, $toUser - $toGrid);
+            $grid = $load + $charge - $discharge - $pv;
+            $calculationMode = 'ac_charge_balance_fallback';
+        }
         return [
             'device_online' => true,
             'device_status_code' => $base[0] ?? null,
             'device_mode' => 'growatt_modbus_rtu',
             'priority_code' => $priority,
             'priority_mode' => match($priority){0=>'load_first',1=>'battery_first',2=>'grid_first',default=>'unknown'},
-            'pv_power_w' => $this->u32($base, 1) * 0.1,
+            'pv_power_w' => $pv,
             'pv1_voltage_v' => ($base[3] ?? 0) * 0.1,
             'pv1_current_a' => ($base[4] ?? 0) * 0.1,
             'pv1_power_w' => $this->u32($base, 5) * 0.1,
@@ -42,13 +59,15 @@ final class GrowattSphReader
             'battery_charge_power_w' => $charge,
             'battery_power_w' => $discharge - $charge,
             'battery_soc_pct' => (float) ($hybrid[14] ?? 0),
-            'load_power_w' => $this->u32($hybrid, 37) * 0.1,
+            'load_power_w' => round($load,1),
+            'reported_local_load_w' => $reportedLocalLoad,
             'power_to_user_w' => $toUser,
             'power_to_grid_w' => $toGrid,
-            // Growatt exposes import and export as separate positive counters.
             // Portal convention: positive = import, negative = export.
-            'grid_power_w' => $toUser - $toGrid,
-            'data_quality' => 'measured_unverified_mapping',
+            'grid_power_w' => round($grid,1),
+            'calculation_mode' => $calculationMode,
+            'energy_balance_error_w' => round($pv + $discharge + max(0,$grid) - $load - $charge - max(0,-$grid),1),
+            'data_quality' => 'calculated_energy_balance',
             'source_timestamp' => $now,
             'received_timestamp' => $now,
         ];
