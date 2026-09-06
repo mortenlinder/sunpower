@@ -26,7 +26,7 @@ mv "$temporary" "$ENV_FILE"
 
 device_password=$(od -An -N12 -tx1 /dev/urandom | tr -d ' \n')
 mosquitto_passwd -b -c /etc/mosquitto/passwd wattslive "$device_password"
-chown root:root /etc/mosquitto/passwd
+chown root:mosquitto /etc/mosquitto/passwd
 chmod 0640 /etc/mosquitto/passwd
 
 install -d -o ml -g ml -m 0700 /home/ml/solportalen-deploy
