@@ -26,7 +26,7 @@ mv "$temporary" "$ENV_FILE"
 
 device_password=$(od -An -N12 -tx1 /dev/urandom | tr -d ' \n')
 mosquitto_passwd -b -c /etc/mosquitto/passwd wattslive "$device_password"
-chown root:mosquitto /etc/mosquitto/passwd
+chown root:root /etc/mosquitto/passwd
 chmod 0640 /etc/mosquitto/passwd
 
 install -d -o ml -g ml -m 0700 /home/ml/solportalen-deploy
@@ -56,7 +56,9 @@ CONF
 
 install -o root -g root -m 0644 "$APP_DIR/systemd/solportal-watts-mqtt.service" /etc/systemd/system/solportal-watts-mqtt.service
 systemctl daemon-reload
-systemctl enable --now mosquitto solportal-watts-mqtt.service
+systemctl enable mosquitto solportal-watts-mqtt.service
+systemctl restart mosquitto
+systemctl restart solportal-watts-mqtt.service
 
 echo "Watts MQTT broker og worker er installeret."
 echo "Enhedens indstillinger ligger i $DEVICE_CREDENTIALS"
