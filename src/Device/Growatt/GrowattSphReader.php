@@ -57,7 +57,10 @@ final class GrowattSphReader
     /** @return array{input_0_99:list<int>,input_1000_1099:list<int>} */
     public function rawSnapshot(): array
     {
-        return ['input_0_99' => $this->read(0, 100), 'input_1000_1099' => $this->read(1000, 100)];
+        return [
+            'input_0_99' => array_merge($this->read(0,50),$this->read(50,50)),
+            'input_1000_1099' => array_merge($this->read(1000,50),$this->read(1050,50)),
+        ];
     }
 
     /** @return list<int> */
