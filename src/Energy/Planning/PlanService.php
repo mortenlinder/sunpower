@@ -20,14 +20,18 @@ final class PlanService
     {
         $prices = $this->prices($hours); if ($prices === []) return null;
         $weather = $this->weather(); $loadProfile = $this->loadProfile(); $events = $this->evProfile();
+        $observations=$this->pdo->query("SELECT signal_name,value_json,received_timestamp FROM current_state WHERE signal_name IN ('pv_power_w','load_power_w')")->fetchAll();
+        $now=time();
         $intervals = [];
         foreach ($prices as $price) {
             $start = new DateTimeImmutable($price['interval_start'], new DateTimeZone('UTC')); $end = new DateTimeImmutable($price['interval_end'], new DateTimeZone('UTC'));
             $duration = ($end->getTimestamp()-$start->getTimestamp())/3600; $local = $start->setTimezone(new DateTimeZone('Europe/Copenhagen'));
             $profileKey = $local->format('N-G'); $baseW = (float) ($loadProfile[$profileKey] ?? Env::get('DEFAULT_LOAD_W','900'));
-            $evW = $this->expectedEvW($local, $events); $weatherKey = $start->format('Y-m-d-H'); $pvW = (float) ($weather[$weatherKey]['expected_pv_w'] ?? 0);
+            $evW = $this->expectedEvW($local, $events); $weatherKey = $start->format('Y-m-d-H');
+            $pvW = isset($weather[$weatherKey])?SolarPowerForecast::watts((int)(($start->getTimestamp()+$end->getTimestamp())/2),(float)$weather[$weatherKey]['cloud_pct'],(float)Env::get('LOCATION_LAT','55.7833'),(float)Env::get('LOCATION_LON','12.3833'),(int)Env::get('PV_PEAK_W','6000')):0;
             $intervals[] = ['starts_at'=>$start->format('Y-m-d H:i:s'),'ends_at'=>$end->format('Y-m-d H:i:s'),'buy_price'=>(float)$price['total_dkk_kwh'],'load_kwh'=>round(($baseW+$evW)*$duration/1000,4),'solar_kwh'=>round($pvW*$duration/1000,4),'confidence'=>$loadProfile===[]?.48:.72];
         }
+        foreach($intervals as &$interval)$interval=self::applyObservedPower($interval,$observations,$now);unset($interval);
         $state = (new StateRepository($this->pdo))->current();
         $battery = ['soc_pct'=>(float)($state['battery_soc_pct']??50),'capacity_kwh'=>(float)Env::get('BATTERY_CAPACITY_KWH','6.5'),'min_soc_pct'=>(float)Env::get('BATTERY_MIN_SOC_PCT','20'),'reserve_pct'=>(float)Env::get('BATTERY_RESERVE_PCT','20'),'max_soc_pct'=>(float)Env::get('BATTERY_MAX_SOC_PCT','95'),'max_charge_w'=>(int)Env::get('BATTERY_MAX_CHARGE_W','2500'),'max_discharge_w'=>(int)Env::get('BATTERY_MAX_DISCHARGE_W','2500'),'round_trip_efficiency'=>(float)Env::get('BATTERY_ROUND_TRIP_EFFICIENCY','.88'),'wear_dkk_kwh'=>(float)Env::get('BATTERY_WEAR_DKK_KWH','.12'),'allow_grid_charge'=>true];
         $optimized = (new DynamicProgrammingOptimizer())->optimize($intervals,$battery); if ($optimized===[]) return null;
@@ -85,7 +89,25 @@ final class PlanService
     private function fallbackMode():string{$value=$this->pdo->query("SELECT state_value FROM operational_state WHERE state_key='fallback_mode'")->fetchColumn();return in_array($value,['battery_first','load_first'],true)?(string)$value:'battery_first';}
 
     private function prices(int $hours):array{$rows=$this->pdo->query('SELECT interval_start,interval_end,spot_dkk_kwh FROM prices WHERE interval_end>=UTC_TIMESTAMP() AND interval_start<UTC_TIMESTAMP()+INTERVAL '.max(1,min(48,$hours)).' HOUR ORDER BY interval_start')->fetchAll();$tz=new DateTimeZone('Europe/Copenhagen');$tax=ElectricityTax::blendedRate();foreach($rows as &$r){$h=(int)(new DateTimeImmutable($r['interval_start'],new DateTimeZone('UTC')))->setTimezone($tz)->format('G');$tariff=$h<6?(float)Env::get('GRID_TARIFF_LOW_DKK','.1062'):($h>=17&&$h<21?(float)Env::get('GRID_TARIFF_PEAK_DKK','.4141'):(float)Env::get('GRID_TARIFF_HIGH_DKK','.1593'));$r['total_dkk_kwh']=round(((float)$r['spot_dkk_kwh']+$tariff+$tax+(float)Env::get('SUPPLIER_MARKUP_DKK','0'))*1.25,4);}unset($r);return$rows;}
-    private function weather():array{$rows=$this->pdo->query('SELECT forecast_at,expected_pv_w FROM weather_forecasts WHERE forecast_at>=UTC_TIMESTAMP()-INTERVAL 1 HOUR')->fetchAll();$result=[];foreach($rows as$r)$result[(new DateTimeImmutable($r['forecast_at'],new DateTimeZone('UTC')))->format('Y-m-d-H')]=$r;return$result;}
+    private function weather():array{$rows=$this->pdo->query('SELECT forecast_at,cloud_pct FROM weather_forecasts WHERE forecast_at>=UTC_TIMESTAMP()-INTERVAL 1 HOUR')->fetchAll();$result=[];foreach($rows as$r)$result[(new DateTimeImmutable($r['forecast_at'],new DateTimeZone('UTC')))->format('Y-m-d-H')]=$r;return$result;}
+
+    public static function applyObservedPower(array $interval,array $observations,int $now):array
+    {
+        $start=strtotime($interval['starts_at'].' UTC');$end=strtotime($interval['ends_at'].' UTC');
+        if($now<$start||$now>=$end)return $interval;
+        $hours=($end-$now)/3600;$fraction=($end-$now)/max(1,$end-$start);
+        $interval['starts_at']=gmdate('Y-m-d H:i:s',$now);
+        $interval['solar_kwh']*=$fraction;$interval['load_kwh']*=$fraction;
+        foreach($observations as$observation){
+            $age=$now-strtotime($observation['received_timestamp'].' UTC');
+            if($age<0||$age>30)continue;
+            $value=json_decode($observation['value_json'],true);
+            if(!is_numeric($value))continue;
+            $key=match($observation['signal_name']){'pv_power_w'=>'solar_kwh','load_power_w'=>'load_kwh',default=>null};
+            if($key!==null)$interval[$key]=round(max(0,(float)$value)*$hours/1000,4);
+        }
+        return $interval;
+    }
     private function loadProfile():array{$rows=$this->pdo->query("SELECT DAYOFWEEK(source_timestamp) dow,HOUR(source_timestamp) hour,AVG(value_decimal) watts FROM telemetry WHERE signal_name='load_power_w' AND source_timestamp>UTC_TIMESTAMP()-INTERVAL 28 DAY GROUP BY DAYOFWEEK(source_timestamp),HOUR(source_timestamp)")->fetchAll();$result=[];foreach($rows as$r){$iso=((int)$r['dow']+5)%7+1;$result[$iso.'-'.$r['hour']]=(float)$r['watts'];}return$result;}
     private function evProfile():array{return$this->pdo->query('SELECT WEEKDAY(started_at)+1 weekday,HOUR(started_at) start_hour,AVG(TIMESTAMPDIFF(MINUTE,started_at,ended_at)) duration_min,AVG(detected_load_w) watts,COUNT(*) samples FROM consumption_events WHERE ended_at IS NOT NULL AND started_at>UTC_TIMESTAMP()-INTERVAL 42 DAY GROUP BY WEEKDAY(started_at),HOUR(started_at) HAVING COUNT(*)>=2')->fetchAll();}
     private function expectedEvW(DateTimeImmutable $local,array $events):float{foreach($events as$event){if((int)$event['weekday']!==(int)$local->format('N'))continue;$start=(int)$event['start_hour'];$duration=max(1,(float)$event['duration_min']/60);$hour=(int)$local->format('G')+(int)$local->format('i')/60;if($hour>=$start&&$hour<$start+$duration)return(float)$event['watts'];}return 0;}

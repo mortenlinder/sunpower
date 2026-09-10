@@ -111,5 +111,19 @@ $test('Solar status checks AC flag, measured charging and missing sunlight',stat
     $state['ac_charge_enabled']=false;$state['pv_power_w']=0;$state['battery_charge_power_w']=0;
     $assert(Solportalen\Energy\Planning\ExecutionStatus::describe($s,$state,$now)['status']==='waiting_for_solar');
 });
+$test('Solar forecast is zero after sunset in Vaerloese, also in winter',static function()use($assert):void{
+    foreach(['2026-09-10 20:00:00 Europe/Copenhagen','2026-12-10 17:00:00 Europe/Copenhagen','2026-09-10 03:00:00 Europe/Copenhagen']as$at)
+        $assert(Solportalen\Energy\Planning\SolarPowerForecast::watts(strtotime($at),0,55.7833,12.3833,6000)===0);
+    $assert(Solportalen\Energy\Planning\SolarPowerForecast::watts(strtotime('2026-09-10 12:00 UTC'),20,55.7833,12.3833,6000)>0);
+});
+$test('Current interval uses fresh measured PV/load, never stale samples or future substitution',static function()use($assert):void{
+    $now=strtotime('2026-09-10 13:05 UTC');$row=['starts_at'=>'2026-09-10 13:00:00','ends_at'=>'2026-09-10 13:15:00','solar_kwh'=>1.5,'load_kwh'=>.25];
+    $observations=[['signal_name'=>'pv_power_w','value_json'=>'0','received_timestamp'=>'2026-09-10 13:04:55'],['signal_name'=>'load_power_w','value_json'=>'2400','received_timestamp'=>'2026-09-10 13:04:55']];
+    $r=Solportalen\Energy\Planning\PlanService::applyObservedPower($row,$observations,$now);
+    $assert($r['solar_kwh']==0);$assert(abs($r['load_kwh']-.4)<.0001);$assert($r['starts_at']==='2026-09-10 13:05:00');
+    $observations[0]['received_timestamp']='2026-09-10 13:00:00';
+    $r=Solportalen\Energy\Planning\PlanService::applyObservedPower($row,$observations,$now);$assert(abs($r['solar_kwh']-1)<.0001);
+    $assert(Solportalen\Energy\Planning\PlanService::applyObservedPower($row,$observations,$now-600)===$row);
+});
 foreach ($tests as [$ok,$name]) echo ($ok ? 'PASS ' : 'FAIL ') . $name . PHP_EOL;
 $failed = count(array_filter($tests, static fn ($t) => !$t[0])); echo sprintf("%d tests, %d fejl\n", count($tests), $failed); if ($failed) exit(1);

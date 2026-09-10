@@ -40,11 +40,9 @@ final class ExternalDataService
             $at = new DateTimeImmutable((string) ($row['time'] ?? 'now'));
             $details = $row['data']['instant']['details'] ?? [];
             $cloud = max(0.0, min(100.0, (float) ($details['cloud_area_fraction'] ?? 100)));
-            $hour = (int) $at->setTimezone(new DateTimeZone('Europe/Copenhagen'))->format('G');
-            $daylight = max(0.0, sin(M_PI * ($hour - 5.0) / 16.0));
-            $score = round(100 * $daylight * (1 - .82 * $cloud / 100), 1);
             $peak = (int) Env::get('PV_PEAK_W', '6000');
-            $expected = (int) round($peak * $score / 100);
+            $expected = \Solportalen\Energy\Planning\SolarPowerForecast::watts($at->getTimestamp(),$cloud,(float)$lat,(float)$lon,$peak);
+            $score = round(100*$expected/max(1,$peak),1);
             $next = $row['data']['next_1_hours'] ?? $row['data']['next_6_hours'] ?? [];
             $statement->execute([$at->format('Y-m-d H:i:s'), Env::get('LOCATION_NAME', 'Værløse'), (float) ($details['air_temperature'] ?? 0), $cloud, (float) ($next['details']['precipitation_amount'] ?? 0), (string) ($next['summary']['symbol_code'] ?? 'unknown'), $score, $expected]);
             $count++;
