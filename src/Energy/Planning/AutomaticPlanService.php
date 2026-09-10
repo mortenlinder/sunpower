@@ -12,7 +12,7 @@ final class AutomaticPlanService
 {
     public function __construct(private readonly PDO $pdo){}
 
-    public function run(?int $planId):array
+    public function run(?int $planId,bool $refreshNow=false):array
     {
         $store=new AutomationSettings($this->pdo);$settings=$store->get();$now=new DateTimeImmutable('now',new DateTimeZone('Europe/Copenhagen'));$today=$now->format('Y-m-d');
         if(!$settings['enabled'])return['status'=>'disabled'];
@@ -23,7 +23,7 @@ final class AutomaticPlanService
         // A daily key previously suppressed later plans while the UI kept generating drafts.
         $last=$settings['last_auto_plan'];
         if($last && in_array($last['command_status'],['pending','claimed'],true))return['status'=>'awaiting_device','plan_id'=>$last['plan_id']];
-        if(!self::refreshDue($last,(string)$priceUntil,$settings['last_auto_price_until'],time()))return['status'=>'already_planned','plan_id'=>$last['plan_id'],'price_until'=>$priceUntil];
+        if(!$refreshNow&&!self::refreshDue($last,(string)$priceUntil,$settings['last_auto_price_until'],time()))return['status'=>'already_planned','plan_id'=>$last['plan_id'],'price_until'=>$priceUntil];
         if(!$planId)return['status'=>'waiting_for_data'];
         $expires=$this->pdo->prepare('SELECT MAX(ends_at) FROM plan_intervals WHERE plan_id=?');$expires->execute([$planId]);$expiresAt=$expires->fetchColumn();if(!$expiresAt)return['status'=>'waiting_for_data'];
         if($settings['enabled_until']!==null){$calendarEnd=(new DateTimeImmutable($settings['enabled_until'],$now->getTimezone()))->modify('+1 day')->setTime(0,0)->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d H:i:s');$expiresAt=min((string)$expiresAt,$calendarEnd);}

@@ -30,6 +30,9 @@ Ved fejl skal kommandoens fejl og den faktiske invertertilstand kontrolleres.
 
 `php bin/solportal automation:run` genererer et forslag og lader den normale
 aktiverings-, tids- og write-kontrol afgøre, om det må sættes i kø.
+Ved en udtrykkelig driftsrettelse kan `automation:run --refresh` springe
+15-minutters ventetiden over. Aktivering, slutdato, write-tilladelse og
+beskyttelsen mod en igangværende kommando gælder stadig.
 
 ## Solopladning
 
@@ -48,3 +51,9 @@ Planens effekter er prognoser. Solopladning kan ikke levere strøm uden sol,
 og Battery First kan medføre, at huset importerer, mens sol lader batteriet.
 Status viser separat ladekilde, faktisk mode og faktisk ladeeffekt.
 Tabellen viser også Hold-perioder og markerer det aktuelle interval med NU.
+
+Solprognosen bruger dato og koordinater med PHP's `date_sun_info` i stedet
+for faste sommertider: https://www.php.net/manual/en/function.date-sun-info.php.
+Det er stadig en simpel sky-/dagslysmodel, ikke en kalibreret PV-prognose.
+I indeværende interval bruges friske PV- og belastningsmålinger, højst 30
+sekunder gamle, og kun intervallets resterende tid indgår i optimeringen.
