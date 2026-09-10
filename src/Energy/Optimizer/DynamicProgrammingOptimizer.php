@@ -11,7 +11,7 @@ final class DynamicProgrammingOptimizer implements EnergyOptimizerInterface
         $capacity = max(.5, (float) ($battery['capacity_kwh'] ?? 6.5));
         $minKwh = $capacity * max((float) ($battery['min_soc_pct'] ?? 20), (float) ($battery['reserve_pct'] ?? 20)) / 100;
         $maxKwh = $capacity * (float) ($battery['max_soc_pct'] ?? 95) / 100;
-        $startKwh = min($maxKwh, max($minKwh, $capacity * (float) ($battery['soc_pct'] ?? 50) / 100));
+        $startKwh = min($maxKwh, max(0, $capacity * (float) ($battery['soc_pct'] ?? 50) / 100));
         $step = max(.1, (float) ($battery['step_kwh'] ?? .25));
         $eta = sqrt(max(.5, min(1.0, (float) ($battery['round_trip_efficiency'] ?? .88))));
         $wear = max(0, (float) ($battery['wear_dkk_kwh'] ?? .12));
@@ -20,6 +20,9 @@ final class DynamicProgrammingOptimizer implements EnergyOptimizerInterface
         $allowGridCharge = (bool) ($battery['allow_grid_charge'] ?? true);
         $levels = [];
         for ($energy = $minKwh; $energy <= $maxKwh + .0001; $energy += $step) $levels[] = round($energy, 4);
+        // The reserve is a discharge limit, not energy already present in the battery.
+        for ($energy = $startKwh; $energy < $minKwh; $energy += $step) $levels[] = round($energy, 4);
+        $levels[] = round($startKwh,4);$levels=array_values(array_unique($levels));sort($levels,SORT_NUMERIC);
         $nearest = fn (float $value): float => $levels[array_reduce(array_keys($levels), fn ($best, $i) => abs($levels[$i]-$value)<abs($levels[$best]-$value)?$i:$best, 0)];
         $start = $nearest($startKwh);
         $states = [(string) $start => ['cost' => 0.0, 'path' => []]];
@@ -32,6 +35,7 @@ final class DynamicProgrammingOptimizer implements EnergyOptimizerInterface
                 $stored = (float) $storedKey;
                 foreach ($levels as $target) {
                     $delta = $target - $stored;
+                    if($delta<-.01&&$target<$minKwh-.0001)continue;
                     if ($delta > $maxChargeKw * $hours * $eta + .001 || -$delta > $maxDischargeKw * $hours / $eta + .001) continue;
                     $gridKwh = $houseNeed; $cycled = abs($delta); $action = 'hold'; $powerW = 0;
                     if ($delta > .01) {

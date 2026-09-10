@@ -31,7 +31,7 @@ final class PlanService
         $state = (new StateRepository($this->pdo))->current();
         $battery = ['soc_pct'=>(float)($state['battery_soc_pct']??50),'capacity_kwh'=>(float)Env::get('BATTERY_CAPACITY_KWH','6.5'),'min_soc_pct'=>(float)Env::get('BATTERY_MIN_SOC_PCT','20'),'reserve_pct'=>(float)Env::get('BATTERY_RESERVE_PCT','20'),'max_soc_pct'=>(float)Env::get('BATTERY_MAX_SOC_PCT','95'),'max_charge_w'=>(int)Env::get('BATTERY_MAX_CHARGE_W','2500'),'max_discharge_w'=>(int)Env::get('BATTERY_MAX_DISCHARGE_W','2500'),'round_trip_efficiency'=>(float)Env::get('BATTERY_ROUND_TRIP_EFFICIENCY','.88'),'wear_dkk_kwh'=>(float)Env::get('BATTERY_WEAR_DKK_KWH','.12'),'allow_grid_charge'=>true];
         $optimized = (new DynamicProgrammingOptimizer())->optimize($intervals,$battery); if ($optimized===[]) return null;
-        $hash = hash('sha256',json_encode([$intervals,$battery],JSON_THROW_ON_ERROR));
+        $hash = hash('sha256',json_encode(['measured-soc-v2',$intervals,$battery],JSON_THROW_ON_ERROR));
         $existing=$this->pdo->prepare('SELECT id FROM plans WHERE input_hash=? ORDER BY id DESC LIMIT 1');$existing->execute([$hash]);$id=$existing->fetchColumn();if($id!==false)return (int)$id;
         $baseline=array_sum(array_column($optimized,'baseline_cost'));$cost=array_sum(array_column($optimized,'optimized_cost'));$saving=max(0,$baseline-$cost);
         $explanation=sprintf('%d intervaller optimeret over %.1f timer. Forventet omkostning %.2f kr. mod %.2f kr. uden plan.',count($optimized),$hours,$cost,$baseline);

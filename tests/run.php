@@ -59,5 +59,57 @@ $test('Execution status distinguishes desired charging from measured charging an
     $assert(Solportalen\Energy\Planning\ExecutionStatus::describe($schedule,$state,$now+60)['status']==='stale');
     $assert(Solportalen\Energy\Planning\ExecutionStatus::describe($schedule,$state,strtotime('2026-09-07 UTC'))['status']==='no_active_plan');
 });
+$test('Optimizer keeps actual SOC below reserve without inventing energy',static function()use($assert):void{
+    $rows=(new DynamicProgrammingOptimizer())->optimize([
+        ['starts_at'=>'2026-09-10 13:00:00','ends_at'=>'2026-09-10 13:15:00','buy_price'=>1,'load_kwh'=>0,'solar_kwh'=>0],
+        ['starts_at'=>'2026-09-10 13:15:00','ends_at'=>'2026-09-10 13:30:00','buy_price'=>5,'load_kwh'=>1,'solar_kwh'=>0],
+    ],['soc_pct'=>11,'capacity_kwh'=>6.5,'min_soc_pct'=>20,'reserve_pct'=>20,'allow_grid_charge'=>false]);
+    $assert(count($rows)===2);$assert(abs($rows[0]['soc_before']-11)<.01);
+    foreach($rows as$row){$assert($row['action']==='hold');$assert(abs($row['soc_after']-11)<.01);}
+});
+$fixtureRow=static fn(string $from,string $to,string $action):array=>['starts_at'=>'2026-09-10 '.$from.':00','ends_at'=>'2026-09-10 '.$to.':00','action'=>$action,'power_w'=>2000,'soc_after'=>80.2,'baseline_cost'=>0,'optimized_cost'=>0];
+$test('Solar charging compiles to Battery First with AC disabled',static function()use($assert,$fixtureRow):void{
+    $schedule=Solportalen\Energy\Planning\GrowattWindowCompiler::compileIntervals(1,[$fixtureRow('13:00','14:00','charge_solar')],strtotime('2026-09-10 22:00 UTC'),strtotime('2026-09-10 13:10 UTC'));
+    $assert(count($schedule['battery_periods'])===1);$assert($schedule['battery_periods'][0]['start']===(15<<8));
+    $assert($schedule['battery_action']==='charge_solar');$assert($schedule['ac_charge_enabled']===0);
+    $assert($schedule['charge_power_pct']>0);$assert($schedule['charge_stop_soc_pct']===81);
+});
+$test('Mixed charging splits at AC boundary and renews only inside approval',static function()use($assert,$fixtureRow):void{
+    $rows=[$fixtureRow('13:00','14:00','charge_solar'),$fixtureRow('14:00','15:00','charge_grid'),$fixtureRow('15:00','16:00','charge_solar')];
+    $end=strtotime('2026-09-10 22:00 UTC');
+    foreach([['13:10','14:00',0],['14:00','15:00',1],['15:00','22:00',0]]as[$now,$boundary,$ac]){
+        $s=Solportalen\Energy\Planning\GrowattWindowCompiler::compileIntervals(1,$rows,$end,strtotime('2026-09-10 '.$now.' UTC'));
+        $assert($s['ac_charge_enabled']===$ac);$assert(strtotime($s['valid_until'])===strtotime('2026-09-10 '.$boundary.' UTC'));
+        $assert(count($s['battery_periods'])===1);$s['automatic_replanning']=true;
+        $assert(Solportalen\Application\ManualPlanCommandProcessor::canRenew($s,$end-1,true));
+        $assert(!Solportalen\Application\ManualPlanCommandProcessor::canRenew($s,$end,true));
+        $assert(!Solportalen\Application\ManualPlanCommandProcessor::canRenew($s,$end-1,false));
+    }
+});
+$test('No charge windows does not set charge power to zero or enable AC',static function()use($assert,$fixtureRow):void{
+    $s=Solportalen\Energy\Planning\GrowattWindowCompiler::compileIntervals(1,[$fixtureRow('13:00','14:00','hold')],strtotime('2026-09-10 22:00 UTC'),strtotime('2026-09-10 13:10 UTC'));
+    $assert($s['battery_periods']===[]);$assert($s['charge_power_pct']>0);$assert($s['ac_charge_enabled']===0);
+});
+$test('Compiler stops at local midnight and final approval expiry',static function()use($assert):void{
+    $rows=[['starts_at'=>'2026-09-10 21:45:00','ends_at'=>'2026-09-10 22:15:00','action'=>'charge_solar','power_w'=>1000,'soc_after'=>40,'baseline_cost'=>0,'optimized_cost'=>0]];
+    $now=strtotime('2026-09-10 21:50 UTC');$expiry=strtotime('2026-09-11 01:00 UTC');
+    $s=Solportalen\Energy\Planning\GrowattWindowCompiler::compileIntervals(1,$rows,$expiry,$now);
+    $assert(strtotime($s['valid_until'])===strtotime('2026-09-10 22:00 UTC'));
+    $assert($s['battery_periods'][0]['stop']===((23<<8)|59));
+    $s=Solportalen\Energy\Planning\GrowattWindowCompiler::compileIntervals(1,$rows,$expiry,strtotime('2026-09-10 22:00 UTC'));
+    $assert($s['battery_periods'][0]['start']===0);$assert($s['battery_periods'][0]['stop']===15);
+    $expiry=strtotime('2026-09-10 21:55 UTC');
+    $s=Solportalen\Energy\Planning\GrowattWindowCompiler::compileIntervals(1,$rows,$expiry,$now);
+    $assert(strtotime($s['valid_until'])===$expiry);$assert($s['battery_periods'][0]['stop']===((23<<8)|55));
+});
+$test('Solar status checks AC flag, measured charging and missing sunlight',static function()use($assert,$fixtureRow):void{
+    $now=strtotime('2026-09-10 13:10 UTC');
+    $s=Solportalen\Energy\Planning\GrowattWindowCompiler::compileIntervals(1,[$fixtureRow('13:00','14:00','charge_solar')],strtotime('2026-09-10 22:00 UTC'),$now);
+    $state=['received_timestamp'=>gmdate(DATE_ATOM,$now),'priority_mode'=>'battery_first','ac_charge_enabled'=>false,'battery_soc_pct'=>11,'battery_charge_power_w'=>1200,'pv_power_w'=>1930];
+    $assert(Solportalen\Energy\Planning\ExecutionStatus::describe($s,$state,$now)['status']==='charging');
+    $state['ac_charge_enabled']=true;$assert(Solportalen\Energy\Planning\ExecutionStatus::describe($s,$state,$now)['status']==='mismatch');
+    $state['ac_charge_enabled']=false;$state['pv_power_w']=0;$state['battery_charge_power_w']=0;
+    $assert(Solportalen\Energy\Planning\ExecutionStatus::describe($s,$state,$now)['status']==='waiting_for_solar');
+});
 foreach ($tests as [$ok,$name]) echo ($ok ? 'PASS ' : 'FAIL ') . $name . PHP_EOL;
 $failed = count(array_filter($tests, static fn ($t) => !$t[0])); echo sprintf("%d tests, %d fejl\n", count($tests), $failed); if ($failed) exit(1);

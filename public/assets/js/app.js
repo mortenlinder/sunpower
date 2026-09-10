@@ -105,7 +105,12 @@ function renderPlan(plan) {
     document.querySelector('#plan-horizon').textContent=`${Number(plan.horizon_hours).toLocaleString('da-DK',{maximumFractionDigits:1})} timer`;
     document.querySelector('#plan-active-count').textContent=plan.action_intervals;
     document.querySelector('#plan-explanation').textContent=plan.explanation;
-    const active=rows.filter(row=>row.action!=='hold');document.querySelector('#plan-rows').innerHTML=(active.length?active:rows.slice(0,8)).map(row=>`<tr><td>${new Date(row.starts_at+'Z').toLocaleString('da-DK',{weekday:'short',hour:'2-digit',minute:'2-digit'})}</td><td><span class="action-pill ${row.action}">${actionName(row.action)}</span></td><td>${Number(row.power_w)?fmt(row.power_w):'—'}</td><td>${Number(row.soc_before).toFixed(0)} → ${Number(row.soc_after).toFixed(0)} %</td><td>${Number(row.buy_price).toLocaleString('da-DK',{minimumFractionDigits:2,maximumFractionDigits:2})}</td><td>${row.explanation}</td></tr>`).join('');
+    const now=Date.now(),visible=rows.filter(row=>new Date(row.ends_at+'Z').getTime()>now);
+    document.querySelector('#plan-rows').innerHTML=visible.map(row=>{
+        const start=new Date(row.starts_at+'Z'),end=new Date(row.ends_at+'Z'),isNow=start.getTime()<=now&&now<end.getTime();
+        const when=`${start.toLocaleString('da-DK',{weekday:'short',hour:'2-digit',minute:'2-digit'})}–${end.toLocaleTimeString('da-DK',{hour:'2-digit',minute:'2-digit'})}`;
+        return `<tr${isNow?' aria-current="time"':''}><td>${isNow?'<b>NU</b> · ':''}${when}</td><td><span class="action-pill ${row.action}">${actionName(row.action)}</span></td><td>${Number(row.power_w)?fmt(row.power_w):'—'}</td><td>${Number(row.soc_before).toFixed(0)} → ${Number(row.soc_after).toFixed(0)} %</td><td>${Number(row.buy_price).toLocaleString('da-DK',{minimumFractionDigits:2,maximumFractionDigits:2})}</td><td>${row.explanation}</td></tr>`;
+    }).join('');
     const button=document.querySelector('#approve-plan'),apply=document.querySelector('#apply-plan');button.disabled=false;button.dataset.planId=plan.id;button.dataset.token=plan.csrf_token;apply.disabled=true;
     const fallbackName=plan.fallback_mode==='load_first'?'Load First':'Battery First';
     button.classList.remove('approved');button.textContent='Gem og godkend planen';apply.textContent='Anvend på inverter';

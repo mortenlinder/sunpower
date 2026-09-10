@@ -21,7 +21,37 @@ final class ManualPlanCommandProcessor
         }catch(\Throwable$error){$failed=$this->pdo->prepare("UPDATE commands SET status='failed',completed_at=UTC_TIMESTAMP(6),error_message=? WHERE id=?");$failed->execute([substr($error->getMessage(),0,500),$command['id']]);$this->audit('apply_approved_plan_failed',(string)$command['id'],['error'=>$error->getMessage()],'Plananvendelse fejlede eller blev rullet tilbage');}
     }
 
-    private function expireSchedule():void{$raw=$this->pdo->query("SELECT state_value FROM operational_state WHERE state_key='manual_schedule'")->fetchColumn();if(!$raw)return;$schedule=json_decode((string)$raw,true);if(!isset($schedule['valid_until'])||strtotime($schedule['valid_until'])>time())return;$fallback=$this->pdo->query("SELECT state_value FROM operational_state WHERE state_key='fallback_mode'")->fetchColumn()?:'battery_first';if(Env::bool('WRITES_ENABLED'))$this->control->setFallbackMode((string)$fallback);$label=$fallback==='battery_first'?'Battery First':'Load First';$this->state('manual_schedule','', 'Planvinduet er udløbet; '.$label.' er verificeret');$this->state('requested_battery_mode',(string)$fallback,'Planvindue udløbet');$this->audit('manual_schedule_expired',(string)($schedule['plan_id']??''),['fallback'=>$fallback],'Automatisk sikkerhedsudløb');}
+    private function expireSchedule():void
+    {
+        $raw=$this->pdo->query("SELECT state_value FROM operational_state WHERE state_key='manual_schedule'")->fetchColumn();if(!$raw)return;
+        $schedule=json_decode((string)$raw,true);
+        if(!isset($schedule['valid_until'])||strtotime($schedule['valid_until'])>time()||!Env::bool('WRITES_ENABLED'))return;
+        $enabled=$this->pdo->query("SELECT state_value FROM operational_state WHERE state_key='intelligent_control_enabled'")->fetchColumn()==='1';
+        if(self::canRenew($schedule,time(),$enabled)){
+            try{
+                $next=(new GrowattWindowCompiler($this->pdo))->compile((int)$schedule['plan_id']);
+                $next['source']=$schedule['source'];$next['automatic_replanning']=$schedule['automatic_replanning'];
+                $result=$this->control->applySchedule($next);
+                $this->state('manual_schedule',json_encode($next,JSON_THROW_ON_ERROR),'Næste del af godkendt plan anvendt');
+                $this->audit('advance_plan_segment',(string)$schedule['plan_id'],['schedule'=>$next,'readback'=>$result],'Skift af ladekilde eller kalenderdag verificeret');
+                return;
+            }catch(\Throwable $error){
+                $this->audit('advance_plan_segment_failed',(string)$schedule['plan_id'],['error'=>$error->getMessage()],'Næste plansegment fejlede; forsøger fallback');
+            }
+        }
+        $fallback=$this->pdo->query("SELECT state_value FROM operational_state WHERE state_key='fallback_mode'")->fetchColumn()?:'battery_first';
+        $this->control->setFallbackMode((string)$fallback);
+        $label=$fallback==='battery_first'?'Battery First':'Load First';
+        $this->state('manual_schedule','', 'Planvinduet er udløbet; '.$label.' er verificeret');
+        $this->state('requested_battery_mode',(string)$fallback,'Planvindue udløbet');
+        $this->audit('manual_schedule_expired',(string)($schedule['plan_id']??''),['fallback'=>$fallback],'Automatisk sikkerhedsudløb');
+    }
+
+    public static function canRenew(array $schedule,int $now,bool $automaticEnabled):bool
+    {
+        return !empty($schedule['plan_valid_until'])&&strtotime($schedule['plan_valid_until'])>$now
+            &&(empty($schedule['automatic_replanning'])||$automaticEnabled);
+    }
     private function state(string$key,string$value,string$reason):void{$s=$this->pdo->prepare('INSERT INTO operational_state(state_key,state_value,reason,updated_at) VALUES(?,?,?,UTC_TIMESTAMP(6)) ON DUPLICATE KEY UPDATE state_value=VALUES(state_value),reason=VALUES(reason),updated_at=VALUES(updated_at)');$s->execute([$key,$value,$reason]);}
     private function audit(string$action,string$id,array$data,string$reason):void{$s=$this->pdo->prepare('INSERT INTO audit_log(actor,action,object_type,object_id,before_json,after_json,reason,ip_address,correlation_id,created_at) VALUES("device-worker",?,"plan",?,NULL,?,?,NULL,UUID(),UTC_TIMESTAMP(6))');$s->execute([$action,$id,json_encode($data,JSON_THROW_ON_ERROR),$reason]);}
 }
