@@ -27,7 +27,7 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y \
     rsync \
     logrotate \
     ca-certificates \
-    curl
+    curl \
     mosquitto \
     mosquitto-clients
 
@@ -35,6 +35,12 @@ systemctl enable --now mariadb apache2
 
 # En tidligere installation kan allerede have device-workeren kørende. Stop den
 # før filer udskiftes og før den eksklusive read-only serieportstest køres.
+DEVICE_WAS_ACTIVE=0
+systemctl is-active --quiet solportal-device.service && DEVICE_WAS_ACTIVE=1
+restore_worker() {
+    if [ "$DEVICE_WAS_ACTIVE" -eq 1 ]; then systemctl start solportal-device.service || true; fi
+}
+trap restore_worker EXIT
 systemctl stop solportal-device.service 2>/dev/null || true
 
 getent group solportal-app >/dev/null 2>&1 || groupadd --system solportal-app
@@ -43,7 +49,13 @@ usermod -a -G dialout,solportal-app solportal
 usermod -a -G solportal-app www-data
 
 mkdir -p "$APP_DIR"
-rsync -a --delete --exclude='.git/' --exclude='.env' "$SOURCE_DIR/" "$APP_DIR/"
+if [ "$SOURCE_DIR" = "$APP_DIR" ]; then
+    echo "Kør installationen fra den udpakkede kildekodemappe, ikke $APP_DIR." >&2
+    exit 1
+fi
+rsync -a --delete --exclude='.git/' --exclude='.env' --exclude='var/' \
+    --exclude='portal/' --exclude='tmp/' --exclude='output/' --exclude='dist/' \
+    --exclude='.build_tools/' --exclude='.reference-*/' "$SOURCE_DIR/" "$APP_DIR/"
 mkdir -p "$APP_DIR/var"
 
 # .env bevares ved opgraderinger. Genbrug derfor den eksisterende
@@ -140,7 +152,7 @@ ensure_env OCPP_PORT 9000
 ensure_env OCPP_USER teison
 ensure_env OCPP_PASSWORD "$(od -An -N18 -tx1 /dev/urandom | tr -d ' \n')"
 
-chown -R root:solportal-app "$APP_DIR"
+find "$APP_DIR" -path "$APP_DIR/var" -prune -o -exec chown root:solportal-app {} +
 chown solportal:solportal-app "$APP_DIR/var"
 chmod 0750 "$APP_DIR" "$APP_DIR/var"
 chmod 0640 "$APP_DIR/.env"
@@ -159,24 +171,29 @@ install -m 0644 "$APP_DIR/systemd/solportal-forecast.service" /etc/systemd/syste
 install -m 0644 "$APP_DIR/systemd/solportal-forecast.timer" /etc/systemd/system/solportal-forecast.timer
 install -m 0644 "$APP_DIR/systemd/solportal-ocpp.service" /etc/systemd/system/solportal-ocpp.service
 install -m 0644 "$APP_DIR/systemd/solportal-watts-mqtt.service" /etc/systemd/system/solportal-watts-mqtt.service
+install -m 0644 "$APP_DIR/systemd/solportal-cloud.service" /etc/systemd/system/solportal-cloud.service
 systemctl daemon-reload
 
 runuser -u solportal -- php "$APP_DIR/bin/solportal" database:migrate
 # Function 03 er read-only. Gem et holding-register-snapshot, mens den permanente
 # device-worker stadig er stoppet og serieporten derfor er ledig.
-if ! runuser -u solportal -- php "$APP_DIR/bin/solportal" modbus:holding --save; then
-    echo "ADVARSEL: Holding-register 1070-1108 kunne ikke læses. Writes forbliver låst." >&2
+if [ ! -f "$APP_DIR/var/commissioning-growatt-holding.json" ] && ! runuser -u solportal -- php "$APP_DIR/bin/solportal" modbus:holding --save; then
+    echo "ADVARSEL: Holding-register 1070-1108 kunne ikke læses. Ingen write-rettigheder er ændret; kontrollér commissioning." >&2
 fi
 # En commissioning-læsning må ikke blokere resten af en softwareopdatering, hvis
 # en anden lokal proces stadig ejer porten. Den permanente worker vil genstarte.
-if ! runuser -u solportal -- php "$APP_DIR/bin/solportal" worker:device --once; then
+if ! runuser -u solportal -- php "$APP_DIR/bin/solportal" serial:test; then
     echo "ADVARSEL: Modbus-engangstesten kunne ikke køres. Kontroller portejeren efter installationen." >&2
 fi
-runuser -u solportal -- php "$APP_DIR/bin/solportal" scheduler:run
+if ! runuser -u solportal -- php "$APP_DIR/bin/solportal" scheduler:run; then
+    echo "ADVARSEL: Prognoser kunne ikke opdateres nu. Timeren prøver igen efter installationen." >&2
+fi
 
 systemctl enable --now solportal-device.service
 systemctl enable --now solportal-forecast.timer
-systemctl enable --now solportal-ocpp.service
+# OCPP and other optional integrations are not enabled by a portal installation.
+# Existing enabled services are left unchanged.
+systemctl enable --now solportal-cloud.service
 systemctl restart apache2
 
 echo
@@ -185,3 +202,4 @@ echo "Dashboard: http://$(hostname -I | awk '{print $1}')/"
 echo "Serieport: ${SERIAL_DEVICE}"
 echo "Status: systemctl status solportal-device --no-pager"
 echo "Live log: journalctl -u solportal-device -f"
+echo "Portal: sudo -u solportal php $APP_DIR/bin/solportal cloud:pair"

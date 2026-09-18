@@ -14,7 +14,7 @@ $automationEnabled = (bool)($automationSettings['enabled'] ?? false);
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#06110e"><title>Solportalen</title>
   <link rel="manifest" href="/manifest.webmanifest"><link rel="stylesheet" href="/assets/css/app.css?v=9"><link rel="stylesheet" href="/assets/css/insights.css?v=2"><link rel="stylesheet" href="/assets/css/learning.css"><link rel="stylesheet" href="/assets/css/plan.css"><link rel="stylesheet" href="/assets/css/control.css?v=9">
-  <script src="/assets/js/app.js?v=11" defer></script>
+  <script src="/assets/js/app.js?v=12" defer></script>
 </head>
 <body class="<?= $wallboard ? 'wallboard' : '' ?>" data-mode="<?= htmlspecialchars($mode, ENT_QUOTES) ?>">
 <header>
@@ -24,6 +24,7 @@ $automationEnabled = (bool)($automationSettings['enabled'] ?? false);
 <div class="layout">
 <?php if (!$wallboard): ?><nav><div class="nav-label">SOLPORTALEN</div><a class="active" href="/"><span>◉</span>Overblik</a><a href="#flow"><span>⌁</span>Energiflow</a><a href="/analytics"><span>▥</span>Analyse & rapporter</a><a href="/settings/automation"><span>✦</span>Intelligent styring</a><a href="/weather"><span>☀</span>Vejrprognose</a><a href="/prices"><span>↗</span>Elprisprognose</a><a href="/suppliers"><span>⌕</span>Leverandørvagt</a><a href="#plan"><span>◇</span>Aktuel plan</a><div class="nav-label">ANLÆG</div><a href="/commissioning"><span>⌘</span>Commissioning</a><a href="/wallboard"><span>□</span>Wallboard</a><div class="nav-safety"><i></i><div><b><?= $automationEnabled?'Intelligent drift':'Standardtilstand' ?></b><small><?= htmlspecialchars($fallbackLabel,ENT_QUOTES) ?> uden gyldig plan</small></div></div></nav><?php endif; ?>
 <main>
+  <p id="remote-override-notice" role="status" hidden></p>
   <section class="hero"><div><p class="eyebrow">DIT ENERGIOVERBLIK</p><h1><span>God eftermiddag.</span> Dit anlæg arbejder for dig.</h1><p id="summary"><?= $online ? 'Live-data fra inverteren – helt lokalt i dit hjem.' : 'Venter på friske data fra inverteren.' ?></p></div><div class="safe"><span><?= $online ? '✓' : '!' ?></span><div><b id="connection-status"><?= $online ? 'Live forbindelse' : 'Data mangler' ?></b><small>Opdaterer hvert 5. sekund</small></div></div></section>
 
   <section class="metrics">
@@ -72,5 +73,5 @@ $automationEnabled = (bool)($automationSettings['enabled'] ?? false);
     <aside><article class="insight"><div class="insight-top"><span>LIVE INDSIGT</span><i>✦</i></div><h3 id="insight-title"><?= $batteryText ?></h3><p>Solportalen følger energiens vej lokalt og holder styring bag godkendte planer.</p><div class="readonly"><span>✓</span><div><b><?= $writesEnabled ? 'Write-kanal klar' : 'Read-only beskyttelse' ?></b><small><?= $writesEnabled ? 'Automatisk executor er endnu ikke aktiv' : 'Modbus-writes er deaktiveret' ?></small></div></div></article></aside>
   </section>
 </main></div>
-<footer><span id="footer-source"><?= $mode === 'simulator' ? 'Data er simulerede' : 'Live read-only RS485-data' ?></span> · Data forlader ikke dit lokale netværk · <a href="/healthz">Systemstatus</a></footer>
+<footer><span id="footer-source"><?= $mode === 'simulator' ? 'Data er simulerede' : 'Lokale RS485-data' ?></span> · Portaldeling kræver aktiv parring · <a href="https://solpanel.linder.dk/">Min onlineportal</a> · <a href="/healthz">Systemstatus</a></footer>
 </body></html>

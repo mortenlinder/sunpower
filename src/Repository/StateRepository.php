@@ -64,6 +64,9 @@ final class StateRepository
         // Fresh Watts samples must not make old inverter measurements appear verified.
         $executionState['received_timestamp']=$inverterReceived===null?'1970-01-01 UTC':$inverterReceived.' UTC';
         $state['plan_execution']=\Solportalen\Energy\Planning\ExecutionStatus::describe(is_array($schedule)?$schedule:[],$executionState,time());
+        $remote=$this->pdo->query("SELECT state_value FROM operational_state WHERE state_key='remote_override'")->fetchColumn();
+        $override=$remote?json_decode((string)$remote,true):null;
+        $state['remote_override']=$override?['mode'=>$override['mode']??'unknown','until'=>(int)($override['until']??0),'phase'=>$override['phase']??'unknown']:null;
         return $state;
     }
 

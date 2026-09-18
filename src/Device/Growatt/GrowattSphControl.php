@@ -7,7 +7,7 @@ use RuntimeException;
 use Solportalen\Device\Modbus\RtuCodec;
 use Solportalen\Device\Serial\LinuxSerialTransport;
 
-final class GrowattSphControl
+final class GrowattSphControl implements ModeControl
 {
     private const PERIOD_STARTS=[1080,1083,1086,1100,1103,1106];
     private const MANAGED_REGISTERS=[1070,1071,1080,1081,1082,1083,1084,1085,1086,1087,1088,1090,1091,1092,1100,1101,1102,1103,1104,1105,1106,1107,1108];

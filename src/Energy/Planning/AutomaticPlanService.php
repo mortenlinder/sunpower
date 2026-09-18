@@ -14,6 +14,8 @@ final class AutomaticPlanService
 
     public function run(?int $planId,bool $refreshNow=false):array
     {
+        $remote=$this->pdo->query("SELECT state_value FROM operational_state WHERE state_key='remote_override'")->fetchColumn();
+        if ($remote) return ['status'=>'remote_override','reason'=>'Afventer at device-workeren afslutter den midlertidige fjernmode'];
         $store=new AutomationSettings($this->pdo);$settings=$store->get();$now=new DateTimeImmutable('now',new DateTimeZone('Europe/Copenhagen'));$today=$now->format('Y-m-d');
         if(!$settings['enabled'])return['status'=>'disabled'];
         if($settings['enabled_until']!==null&&$today>$settings['enabled_until']){$store->put('intelligent_control_enabled','0','Kalenderperioden er udløbet');return['status'=>'expired','fallback_mode'=>$settings['fallback_mode']];}

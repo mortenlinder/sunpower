@@ -7,6 +7,10 @@
 /.reference-growatt/
 /.reference-bobbes-growatt/
 /tmp/
+/portal/config.php
+/portal/storage/
+/portal/public/downloads/
+/output/
 *.log
 *.swp
 .DS_Store

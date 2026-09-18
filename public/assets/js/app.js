@@ -191,6 +191,8 @@ async function refresh() {
         document.querySelector('#flow-grid-value').textContent = fmt(state.grid_power_w);
         document.querySelector('#updated-time').textContent = new Date().toLocaleTimeString('da-DK', {hour: '2-digit', minute: '2-digit', second: '2-digit'});
         const modeName={load_first:'Load First',battery_first:'Battery First',grid_first:'Grid First',unknown:'Ukendt mode'}[state.priority_mode]||'Mode afventer';document.querySelector('#inverter-state').textContent=`${modeName} · VPP`;
+        const remoteNotice=document.querySelector('#remote-override-notice');
+        if(remoteNotice){remoteNotice.hidden=!state.remote_override;if(state.remote_override){const r=state.remote_override;remoteNotice.textContent=r.phase==='active'?`Midlertidig mode fra onlineportalen frem til ${new Date(r.until*1000).toLocaleString('da-DK')}. Plananvendelse er sat på pause.`:'Fjernmode behandles; afventer verificeret tilstand eller fallback.';}}
         describe(state);
         animateFlows(state);
         const fresh = payload.data_age_seconds !== null && payload.data_age_seconds < 30;

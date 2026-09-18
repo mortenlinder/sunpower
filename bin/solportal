@@ -31,6 +31,20 @@ if (in_array('--help', $argv, true) || $command === 'help') {
 }
 try {
     switch ($command) {
+        case 'cloud:pair':
+            echo "Parringskode fra solpanel.linder.dk: ";
+            $code=trim((string)fgets(STDIN));
+            (new Solportalen\Integration\Cloud\CloudAgent(Connection::get()))->pair($code);
+            echo "Pi’en er forbundet. Fjernstyring er deaktiveret som standard.\n"; break;
+        case 'cloud:control':
+            if (!in_array($argv[2]??'',['enable','disable'],true)) throw new RuntimeException('Brug cloud:control enable eller disable.');
+            Solportalen\Integration\Cloud\CloudAgent::control($argv[2]==='enable');
+            echo "Lokal fjernstyringstilladelse er opdateret. WRITES_ENABLED ændres ikke.\n"; break;
+        case 'cloud:unpair':
+            $file=Solportalen\Integration\Cloud\CloudAgent::credentialsPath();
+            if (is_file($file) && !unlink($file)) throw new RuntimeException('Kunne ikke fjerne enhedsnøglen.');
+            echo "Den lokale enhedsnøgle er fjernet. Afkobl også anlægget på portalen. Aktiv fjernmode afsluttes af device-workeren.\n"; break;
+        case 'worker:cloud': (new Solportalen\Integration\Cloud\CloudAgent(Connection::get()))->run(in_array('--once',$argv,true)); break;
         case 'app:key': echo 'APP_KEY=' . bin2hex(random_bytes(32)) . PHP_EOL; break;
         case 'database:migrate':
             $pdo = Connection::get();

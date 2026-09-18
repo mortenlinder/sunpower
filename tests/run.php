@@ -125,5 +125,19 @@ $test('Current interval uses fresh measured PV/load, never stale samples or futu
     $r=Solportalen\Energy\Planning\PlanService::applyObservedPower($row,$observations,$now);$assert(abs($r['solar_kwh']-1)<.0001);
     $assert(Solportalen\Energy\Planning\PlanService::applyObservedPower($row,$observations,$now-600)===$row);
 });
+$test('Remote modes are bounded, respect local SOC and do not enable AC for solar',static function()use($assert):void{
+    $now=strtotime('2026-09-18 10:00 UTC');
+    foreach(['load_first','battery_first','charge_grid','grid_first'] as $mode){
+        $s=Solportalen\Integration\Cloud\RemoteMode::schedule(['id'=>str_repeat('a',32),'mode'=>$mode,'duration_minutes'=>15,'expires_at'=>$now+120],$now);
+        $assert($s['until']===$now+900);$assert($s['ac_charge_enabled']===($mode==='charge_grid'?1:0));
+        $assert($s['stop_soc_pct']>=20);$assert($s['charge_stop_soc_pct']<=95);
+        if($mode==='load_first')$assert($s['battery_periods']===[]&&$s['grid_periods']===[]);
+    }
+});
+$test('Remote mode rejects replay expiry and caps at midnight',static function()use($assert):void{
+    $now=strtotime('2026-09-18 21:50 UTC');$c=['id'=>str_repeat('a',32),'mode'=>'charge_grid','duration_minutes'=>120,'expires_at'=>$now+120];
+    $s=Solportalen\Integration\Cloud\RemoteMode::schedule($c,$now);$assert($s['until']===strtotime('2026-09-18 22:00 UTC'));
+    $rejected=false;try{Solportalen\Integration\Cloud\RemoteMode::validate($c,$now+121);}catch(RuntimeException $e){$rejected=true;}$assert($rejected);
+});
 foreach ($tests as [$ok,$name]) echo ($ok ? 'PASS ' : 'FAIL ') . $name . PHP_EOL;
 $failed = count(array_filter($tests, static fn ($t) => !$t[0])); echo sprintf("%d tests, %d fejl\n", count($tests), $failed); if ($failed) exit(1);
