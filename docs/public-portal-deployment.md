@@ -24,9 +24,13 @@ automation and write configuration are preserved.
 4. `php portal/bin/maintenance.php migrate` with the site user.
 5. Run `php portal/bin/maintenance.php` every minute as the same site user.
    Monitor its errors and mail queue; the worker retries delivery eight times.
-6. Configure the sender identity, DKIM/SPF/DMARC and the local sendmail transport.
+6. Configure sender `mail@systems.linder.dk`, DKIM/SPF/DMARC and authenticated SMTP
+   at `web01.vipsupport.dk:587`. STARTTLS and certificate/hostname validation are
+   mandatory. Store `smtp_password` only in private `portal/config.php` or supply
+   `SOLPORTAL_SMTP_PASSWORD` to the cron environment. Local sendmail remains an
+   alternative; no Composer dependency is needed for either transport.
    Test **real mailbox receipt**, including verification and reset, before setting
-   `registration_enabled` true. Sendmail exit 0 means accepted into the MTA,
+   `registration_enabled` true. SMTP success / sendmail exit 0 means accepted into the MTA,
    not delivered to the recipient. Do not claim delivery from a unit test.
 7. Build the PDF and run `scripts/build-public-release.py`. Publish only the
    generated release, checksum and PDF to `/downloads`. Keep previous releases

@@ -17,6 +17,9 @@ try {
     $db->exec(file_get_contents(dirname(__DIR__).'/database/schema.sql'));
     $cfg=['secret'=>str_repeat('a',64),'url'=>'https://solpanel.linder.dk','registration_enabled'=>true];
     $auth=new Auth($db,$cfg);$devices=new Devices($db);
+    $message=SolportalCloud\Mailer::message('mail@example.test','user@example.test','Bekræft din e-mail','Danske tegn: æøå');
+    check(str_contains($message,'Message-ID: <') && str_contains($message,base64_encode('Danske tegn: æøå')),'Mail has message ID and UTF-8-safe body');
+    rejects(fn()=>SolportalCloud\Mailer::message('mail@example.test',"user@example.test\r\nBcc: attacker@example.test",'Test','Body'),'Mail header injection rejected');
     rejects(fn()=>Security::password('short'),'Short password rejected');
     rejects(fn()=>Security::csrf('forged'),'Forged CSRF rejected');
     $auth->register('one@example.test','A sufficiently long password');

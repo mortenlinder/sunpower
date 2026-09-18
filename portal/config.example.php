@@ -6,10 +6,14 @@ return [
     'db_user' => 'solportal_cloud',
     'db_password' => '',
     'secret' => '', // bin2hex(random_bytes(32))
-    'mail_from' => 'noreply@solpanel.linder.dk',
-    // Local sendmail must have working delivery, SPF and DKIM before enabling signup.
+    'mail_from' => 'mail@systems.linder.dk',
+    // Verify real delivery and DNS authentication before enabling signup.
     'registration_enabled' => false,
-    'mail_transport' => 'sendmail',
+    'mail_transport' => 'smtp',
+    'smtp_host' => 'web01.vipsupport.dk',
+    'smtp_port' => 587, // STARTTLS required; 465 uses implicit TLS
+    'smtp_user' => 'mail@systems.linder.dk',
+    // Supply smtp_password ONLY in private config.php, or SOLPORTAL_SMTP_PASSWORD.
     'sendmail_path' => '/usr/sbin/sendmail',
     'public_min_installations' => 5,
 ];
