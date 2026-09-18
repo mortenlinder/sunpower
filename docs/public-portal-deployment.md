@@ -58,6 +58,22 @@ automation and write configuration are preserved.
   SPF/DKIM/DMARC and administrator identity/contact must be finalized first.
 - Owner account and Pi pairing are not yet created; no cloud inverter write was run.
 
+### Sender DNS follow-up (2026-09-18)
+
+- Published TXT `systems.linder.dk`: `v=spf1 ip4:185.121.175.220 -all`.
+- Generated a dedicated RSA-2048 DKIM key through ISPConfig for mail domain 26;
+  selector `solportal202609`, public TXT at
+  `solportal202609._domainkey.systems.linder.dk`. Private key stays on web01.
+- Amavis picked up the signing configuration; `/usr/sbin/amavisd testkeys`
+  reports **pass** for this domain. Parent-zone mail records were not changed.
+- Existing parent DMARC policy is quarantine; no weakening override was added.
+- A test to the owner's supplied email was accepted by Microsoft 365, but inbox
+  placement/authentication headers have not yet been verified.
+- DNS consistency issue predates these changes: ns1 SOA `2026091802`, ns2 SOA
+  `2026081802`. ns2 still returns old wildcard-derived data for systems. ns3/ns4
+  both resolve to `195.190.31.31` and timed out when queried from web01.
+  Fix secondary replication/delegation before declaring sender DNS reliable.
+
 The three `scripts/*portal*web01*`, `provision-portal-ispconfig.php` and
 `test-portal-live-auth.py` helpers are host-specific administrative tools, not
 public endpoints or generic installers. The provisioning helper preserves existing
