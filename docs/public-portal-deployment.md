@@ -45,6 +45,25 @@ automation and write configuration are preserved.
 
 ## Commands on the Pi
 
+### web01 deployment record (2026-09-18)
+
+- ISPConfig site 63 / client 3, PHP 8.2 FPM; only `web/public` is exposed.
+- HTTPS certificate issued and HTTP redirects to HTTPS. Private config returns 404.
+- Dedicated `solportal_cloud` database; configuration owned by web63, mode 0600.
+- Mailbox `mail@systems.linder.dk` created; authenticated STARTTLS submission and
+  actual IMAPS receipt verified. Verification, token replay denial, login and
+  password reset passed against the deployed portal with a disposable test account.
+- Pi download checksum and public PDF verified; desktop and 390px mobile inspected.
+- Registration remains disabled: external recipient delivery, sender-domain
+  SPF/DKIM/DMARC and administrator identity/contact must be finalized first.
+- Owner account and Pi pairing are not yet created; no cloud inverter write was run.
+
+The three `scripts/*portal*web01*`, `provision-portal-ispconfig.php` and
+`test-portal-live-auth.py` helpers are host-specific administrative tools, not
+public endpoints or generic installers. The provisioning helper preserves existing
+site/mailbox records. The initial deploy helper refuses an existing configuration
+or database. Test credentials and SMTP secrets must never be committed.
+
 ```
 sudo -u solportal php /opt/solportalen/bin/solportal cloud:pair
 sudo systemctl enable --now solportal-cloud

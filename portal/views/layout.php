@@ -12,6 +12,9 @@
 <section class="cta"><div><p class="eyebrow">FRA SD-KORT TIL SOLOVERBLIK</p><h2>Klar til at forbinde dit anlæg?</h2><p>Vi tager dig gennem installationen, ét trin ad gangen.</p></div><a class="button" href="/?page=guide">Åbn installationsguiden →</a></section>
 <?php elseif(in_array($page,['register','login','forgot','resend','reset','verify'],true)): ?>
 <section class="auth panel"><p class="eyebrow">VELKOMMEN I SOLPORTALEN</p><h1><?=e(['register'=>'Plads til din energi.','login'=>'Velkommen tilbage.','forgot'=>'Glemt adgangskoden?','resend'=>'Et nyt bekræftelseslink.','reset'=>'Vælg en ny adgangskode.','verify'=>'Bekræft din e-mail.'][$page])?></h1>
+<?php if($page==='register' && empty($config['registration_enabled'])): ?>
+<p class="notice" role="status">Vi klargør den sidste del af mailleveringen. Nye konti åbner snart.</p><p>Du kan allerede læse <a href="/?page=guide">installationsguiden og hente softwaren</a>.</p>
+<?php else: ?>
 <form method="post"><?=csrf()?><input type="hidden" name="action" value="<?=e($page)?>">
 <?php if(in_array($page,['register','login','forgot','resend'],true)): ?><label>E-mail<input name="email" type="email" autocomplete="email" maxlength="254" required></label><?php endif; ?>
 <?php if(in_array($page,['login','register','reset'],true)): ?><label>Adgangskode<input name="password" type="password" autocomplete="<?=$page==='login'?'current-password':'new-password'?>" <?=$page==='login'?'':'minlength="12"'?> maxlength="72" required></label><?php endif; ?>
@@ -19,6 +22,7 @@
 <?php if(in_array($page,['verify','reset'],true)): ?><input type="hidden" id="link-token" name="token"><p>Linket kan kun bruges én gang. Tryk herunder for at fortsætte.</p><?php endif; ?>
 <?php if($page==='register'): ?><p class="fine">Vi sender et bekræftelseslink. Dit anlæg deles ikke offentligt uden dit tilvalg. Læs <a href="/?page=privacy">om data og privatliv</a>.</p><?php endif; ?>
 <button class="button"><?=e(['register'=>'Opret konto →','login'=>'Log ind →','forgot'=>'Send nulstillingslink','resend'=>'Send bekræftelseslink','reset'=>'Gem ny adgangskode','verify'=>'Bekræft e-mail'][$page])?></button></form>
+<?php endif; ?>
 <div class="auth-links"><a href="/?page=forgot">Glemt kode?</a><a href="/?page=resend">Mangler bekræftelsen?</a><a href="/?page=register">Ny konto</a></div></section>
 <?php elseif($page==='dashboard'): ?>
 <section class="section-heading"><div><p class="eyebrow">DIT PRIVATE ENERGIOVERBLIK</p><h1>Hej, solfanger.</h1><p class="muted"><?=e($user['email'])?></p></div><a href="/?page=guide" class="button secondary">Forbind en Pi →</a></section>
